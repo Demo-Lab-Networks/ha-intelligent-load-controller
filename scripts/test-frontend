@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/_common.sh"
+
+require_node
+require_frontend_install
+npm --prefix "${ILC_ROOT_DIR}/frontend" run typecheck
+npm --prefix "${ILC_ROOT_DIR}/frontend" run test

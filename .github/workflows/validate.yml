@@ -1,0 +1,30 @@
+name: HACS and Hassfest
+
+on:
+  pull_request:
+  push:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate HACS integration package
+        uses: hacs/action@main
+        with:
+          category: integration
+          # These are GitHub/brand publication prerequisites, not package checks.
+          # The release check remains intentionally blocked until they are supplied.
+          ignore: brands description images information issues topics
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Home Assistant custom integration conventions
+        uses: home-assistant/actions/hassfest@master

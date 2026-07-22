@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/_common.sh"
+
+require_python
+python_bin="$(ilc_python)"
+dev_config_dir="${ILC_DEV_CONFIG_DIR:-${ILC_ROOT_DIR}/.cache/ha-dev}"
+case "${dev_config_dir}" in
+  "${ILC_ROOT_DIR}"/.cache/ha-dev|"${ILC_ROOT_DIR}"/.cache/ha-dev/*) ;;
+  *)
+    printf 'Refusing to run against %s. ILC_DEV_CONFIG_DIR must be under %s/.cache/ha-dev.\n' \
+      "${dev_config_dir}" "${ILC_ROOT_DIR}" >&2
+    exit 2
+    ;;
+esac
+
+mkdir -p "${dev_config_dir}/custom_components"
+if [[ ! -f "${dev_config_dir}/configuration.yaml" ]]; then
+  cp "${ILC_ROOT_DIR}/examples/home-assistant/configuration.yaml" "${dev_config_dir}/configuration.yaml"
+fi
+
+integration_link="${dev_config_dir}/custom_components/intelligent_load_controller"
+if [[ -e "${integration_link}" && ! -L "${integration_link}" ]]; then
+  printf 'Refusing to replace non-symlink integration path: %s\n' "${integration_link}" >&2
+  exit 2
+fi
+ln -sfn "${ILC_ROOT_DIR}/custom_components/intelligent_load_controller" "${integration_link}"
+
+printf 'Starting Home Assistant with isolated development config: %s\n' "${dev_config_dir}"
+exec "${python_bin}" -m homeassistant --config "${dev_config_dir}"

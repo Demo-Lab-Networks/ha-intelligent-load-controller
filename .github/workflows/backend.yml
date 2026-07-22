@@ -1,0 +1,36 @@
+name: Backend
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install backend development dependencies
+        run: python -m pip install -e ".[dev]"
+      - name: Lint and type-check backend
+        run: scripts/lint backend
+      - name: Test backend
+        run: scripts/test-backend
+      - name: Generate deterministic simulation evidence
+        run: >-
+          python scripts/run_simulation.py
+          --json-output artifacts/simulation-report.json
+          --markdown-output artifacts/simulation-report.md
+          --csv-output artifacts/simulation-slots.csv
+      - name: Upload simulation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: deterministic-simulation-evidence
+          path: artifacts/simulation-*

@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked development dependencies
+        run: python -m pip install -e ".[dev]"
+      - name: Install locked frontend dependencies
+        run: npm ci --prefix frontend
+      - name: Install browser test runtime
+        run: npx --prefix frontend playwright install --with-deps chromium
+      - name: Verify semantic release version
+        run: bash scripts/verify-release-version "${GITHUB_REF_NAME}"
+      - name: Run release preflight
+        run: scripts/release-check
+      - name: Run browser accessibility smoke test
+        run: npm --prefix frontend run test:e2e
+
+  package_validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate HACS integration package
+        uses: hacs/action@main
+        with:
+          category: integration
+          ignore: brands description images information issues topics
+      - name: Validate Home Assistant custom integration conventions
+        uses: home-assistant/actions/hassfest@master
+
+  publish:
+    needs: [quality, package_validation]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" --generate-notes --title "${GITHUB_REF_NAME}"

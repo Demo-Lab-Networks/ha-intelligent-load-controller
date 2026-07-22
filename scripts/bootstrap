@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/_common.sh"
+
+require_python
+require_node
+
+python_bin="$(ilc_python)"
+if [[ ! -x "${ILC_ROOT_DIR}/.venv/bin/python" ]]; then
+  "${python_bin}" -m venv "${ILC_ROOT_DIR}/.venv"
+fi
+
+"${ILC_ROOT_DIR}/.venv/bin/python" -m pip install --upgrade pip
+"${ILC_ROOT_DIR}/.venv/bin/python" -m pip install -e "${ILC_ROOT_DIR}[dev]"
+npm ci --prefix "${ILC_ROOT_DIR}/frontend"
+
+printf 'Bootstrap complete. Development state is confined to %s/.venv and %s/frontend/node_modules.\n' \
+  "${ILC_ROOT_DIR}" "${ILC_ROOT_DIR}"

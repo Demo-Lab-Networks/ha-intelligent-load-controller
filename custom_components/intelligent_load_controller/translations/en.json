@@ -1,0 +1,92 @@
+{
+  "title": "Intelligent Load Controller",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Load Control",
+        "description": "Create one electrical site. Loads are added afterwards.",
+        "data": {
+          "site_name": "Site name"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Load Control",
+        "data": {
+          "site_name": "Site name"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "This site is already configured.",
+      "reconfigure_successful": "Load Control has been reconfigured."
+    },
+    "error": {
+      "invalid_name": "Enter a site name."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Site settings",
+        "data": {
+          "site_name": "Site name",
+          "grid_sign_convention": "Grid power sign convention",
+          "hard_import_limit_w": "Hard import limit (W)"
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "load": {
+      "title": "Load",
+      "flow": {
+        "step": {
+          "user": {
+            "title": "Add load",
+            "data": {
+              "display_name": "Name",
+              "load_type": "Load type",
+              "expected_power_w": "Expected power (W)"
+            }
+          },
+          "reconfigure": {
+            "title": "Reconfigure load",
+            "data": {
+              "display_name": "Name",
+              "load_type": "Load type",
+              "expected_power_w": "Expected power (W)"
+            }
+          }
+        },
+        "abort": {
+          "reconfigure_successful": "Load reconfigured."
+        }
+      }
+    }
+  },
+  "services": {
+    "start_override": {
+      "name": "Start override",
+      "description": "Start a timed or indefinite manual override."
+    },
+    "clear_override": {
+      "name": "Clear override",
+      "description": "Clear a manual override."
+    }
+  },
+  "issues": {
+    "configuration_invalid": {
+      "title": "Load Control configuration needs attention",
+      "description": "{detail} Review the site or load configuration before automatic control can resume."
+    },
+    "runtime_fault": {
+      "title": "Load Control safety input or actuator fault",
+      "description": "Load Control detected `{code}`. Automatic starts are paused where safety inputs cannot be verified. Check the selected entities and actuator feedback."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "site_state": {"name": "Site state"}
+    }
+  }
+}

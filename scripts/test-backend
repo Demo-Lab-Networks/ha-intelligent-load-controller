@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/_common.sh"
+
+require_python
+python_bin="$(ilc_python)"
+exec "${python_bin}" -m pytest "${ILC_ROOT_DIR}/tests" "$@"

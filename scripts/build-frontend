@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/_common.sh"
+
+require_node
+require_frontend_install
+npm --prefix "${ILC_ROOT_DIR}/frontend" run build
+
+artifact="${ILC_ROOT_DIR}/custom_components/intelligent_load_controller/frontend/dist/intelligent-load-controller.js"
+if [[ ! -s "${artifact}" ]]; then
+  printf 'Frontend build completed without the expected committed artifact: %s\n' "${artifact}" >&2
+  exit 1
+fi
+printf 'Built committed integration panel artifact: %s\n' "${artifact}"

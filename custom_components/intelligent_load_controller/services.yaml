@@ -1,0 +1,102 @@
+start_override:
+  name: Start override
+  description: Start a timed or indefinite manual on/off override. Hard electrical and equipment limits still apply.
+  fields:
+    entry_id:
+      required: true
+      selector:
+        text:
+    load_id:
+      required: true
+      selector:
+        text:
+    desired_state:
+      required: true
+      selector:
+        select:
+          options:
+            - "on"
+            - "off"
+    duration:
+      selector:
+        duration:
+    expires_at:
+      selector:
+        datetime:
+    indefinite:
+      selector:
+        boolean:
+clear_override:
+  name: Clear override
+  description: Clear the active manual override for a load.
+  fields:
+    entry_id:
+      required: true
+      selector:
+        text:
+    load_id:
+      required: true
+      selector:
+        text:
+set_automatic_control:
+  name: Set automatic control
+  description: Enable or disable automatic control without changing the physical output when disabling.
+  fields:
+    entry_id:
+      required: true
+      selector:
+        text:
+    load_id:
+      required: true
+      selector:
+        text:
+    enabled:
+      required: true
+      selector:
+        boolean:
+replan:
+  name: Replan
+  description: Recalculate and safely re-evaluate a site or load plan through the site arbitrator. This never bypasses hard limits.
+  fields:
+    entry_id:
+      required: true
+      selector:
+        text:
+    load_id:
+      selector:
+        text:
+skip_operational_day:
+  name: Skip operational day
+  description: Mark one load as skipped for the current operational day.
+  fields:
+    entry_id:
+      required: true
+      selector:
+        text:
+    load_id:
+      required: true
+      selector:
+        text:
+reset_daily_accounting:
+  name: Reset daily accounting
+  description: Reset integration-maintained daily accounting after explicit confirmation.
+  fields:
+    entry_id:
+      required: true
+      selector:
+        text:
+    confirmed:
+      required: true
+      selector:
+        boolean:
+export_decision_report:
+  name: Export decision report
+  description: Create a redacted, bounded decision report for a site or load.
+  fields:
+    entry_id:
+      required: true
+      selector:
+        text:
+    load_id:
+      selector:
+        text:

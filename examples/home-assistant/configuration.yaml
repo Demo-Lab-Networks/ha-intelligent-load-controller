@@ -1,0 +1,55 @@
+# Isolated, non-production Home Assistant configuration for scripts/run-ha-dev.
+# It contains only helper entities; do not copy production secrets or device IDs here.
+homeassistant:
+  name: Intelligent Load Controller Development
+  time_zone: Australia/Brisbane
+  unit_system: metric
+  currency: AUD
+
+default_config:
+
+input_boolean:
+  ilc_simulated_hot_water:
+    name: ILC Simulated Hot Water
+  ilc_simulated_ev_charger:
+    name: ILC Simulated EV Charger
+
+input_number:
+  ilc_simulated_grid_power:
+    name: ILC Simulated Grid Power
+    min: -10000
+    max: 10000
+    step: 100
+    unit_of_measurement: W
+  ilc_simulated_solar_power:
+    name: ILC Simulated Solar Power
+    min: 0
+    max: 15000
+    step: 100
+    unit_of_measurement: W
+  ilc_simulated_import_price:
+    name: ILC Simulated Import Price
+    min: -1
+    max: 5
+    step: 0.01
+    unit_of_measurement: AUD/kWh
+
+template:
+  - sensor:
+      - name: ILC Simulated Grid Power
+        unique_id: ilc_simulated_grid_power
+        unit_of_measurement: W
+        device_class: power
+        state_class: measurement
+        state: "{{ states('input_number.ilc_simulated_grid_power') }}"
+      - name: ILC Simulated Solar Power
+        unique_id: ilc_simulated_solar_power
+        unit_of_measurement: W
+        device_class: power
+        state_class: measurement
+        state: "{{ states('input_number.ilc_simulated_solar_power') }}"
+      - name: ILC Simulated Import Price
+        unique_id: ilc_simulated_import_price
+        unit_of_measurement: AUD/kWh
+        state_class: measurement
+        state: "{{ states('input_number.ilc_simulated_import_price') }}"

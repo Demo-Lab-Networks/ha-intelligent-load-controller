@@ -1,0 +1,34 @@
+name: Frontend
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked frontend dependencies
+        run: npm ci --prefix frontend
+      - name: Lint frontend
+        run: scripts/lint frontend
+      - name: Test frontend
+        run: scripts/test-frontend
+      - name: Install browser test runtime
+        run: npx --prefix frontend playwright install --with-deps chromium
+      - name: Run browser accessibility smoke test
+        run: npm --prefix frontend run test:e2e
+      - name: Build committed panel artifact
+        run: scripts/build-frontend
+      - name: Verify generated artifact is committed
+        run: git diff --exit-code -- custom_components/intelligent_load_controller/frontend/dist

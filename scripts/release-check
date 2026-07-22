@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/_common.sh"
+
+missing=0
+manifest="${ILC_ROOT_DIR}/custom_components/intelligent_load_controller/manifest.json"
+release_evidence="${ILC_ROOT_DIR}/docs/release/RELEASE_EVIDENCE.md"
+
+for path in "${ILC_ROOT_DIR}/hacs.json" "${manifest}" \
+  "${ILC_ROOT_DIR}/custom_components/intelligent_load_controller/translations/en.json" \
+  "${ILC_ROOT_DIR}/custom_components/intelligent_load_controller/frontend/dist/intelligent-load-controller.js"; do
+  if [[ ! -s "${path}" ]]; then
+    printf 'Release prerequisite is missing or empty: %s\n' "${path}" >&2
+    missing=1
+  fi
+done
+
+if [[ -f "${manifest}" ]] && grep -Eq 'github\.com/(OWNER|YOUR_|REPLACE_ME|example)' "${manifest}"; then
+  printf 'Release prerequisite: replace placeholder GitHub URLs in manifest.json with the repository owner URLs.\n' >&2
+  missing=1
+fi
+if [[ -f "${manifest}" ]] && grep -Eq '"codeowners"[[:space:]]*:[[:space:]]*\[[[:space:]]*\]' "${manifest}"; then
+  printf 'Release prerequisite: provide a real manifest code owner before public release.\n' >&2
+  missing=1
+fi
+if [[ ! -s "${release_evidence}" ]] || ! grep -Fqx 'Release approval: APPROVED' "${release_evidence}"; then
+  printf 'Release prerequisite: add reviewed docs/release/RELEASE_EVIDENCE.md with Release approval: APPROVED after every release gate has evidence.\n' >&2
+  missing=1
+fi
+
+if (( missing )); then
+  printf 'Release check stopped before publication. See docs/EXTERNAL_PREREQUISITES.md; no release was created.\n' >&2
+  exit 2
+fi
+
+"${SCRIPT_DIR}/lint" all
+"${SCRIPT_DIR}/test"
+"${SCRIPT_DIR}/build-frontend"
+
+if ! git -C "${ILC_ROOT_DIR}" diff --exit-code -- custom_components/intelligent_load_controller/frontend/dist; then
+  printf 'Release check failed: rebuild changed the committed frontend artifact. Commit the reproducible build output.\n' >&2
+  exit 1
+fi
+
+printf 'Local release preflight passed. HACS/Hassfest and clean-install evidence remain CI/release requirements.\n'

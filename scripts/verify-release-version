@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Validate the semantic tag/version/changelog contract before a GitHub Release.
+set -euo pipefail
+
+readonly SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/_common.sh"
+
+release_tag="${1:-${GITHUB_REF_NAME:-}}"
+if [[ ! "${release_tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  printf 'Release tag must use exact semantic version form vX.Y.Z; received: %s\n' "${release_tag:-<empty>}" >&2
+  exit 2
+fi
+
+require_python
+python_bin="$(ilc_python)"
+manifest="${ILC_ROOT_DIR}/custom_components/intelligent_load_controller/manifest.json"
+manifest_version="$("${python_bin}" - "${manifest}" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    print(json.load(handle)["version"])
+PY
+)"
+release_version="${release_tag#v}"
+
+if [[ "${manifest_version}" != "${release_version}" ]]; then
+  printf 'Release tag %s does not match manifest version %s.\n' \
+    "${release_tag}" "${manifest_version}" >&2
+  exit 1
+fi
+
+if ! grep -Eq "^## \\[${release_version//./\\.}\\]" "${ILC_ROOT_DIR}/CHANGELOG.md"; then
+  printf 'CHANGELOG.md must contain a section headed ## [%s] before release.\n' \
+    "${release_version}" >&2
+  exit 1
+fi
+
+printf 'Release tag, manifest version, and changelog section agree: %s\n' "${release_tag}"

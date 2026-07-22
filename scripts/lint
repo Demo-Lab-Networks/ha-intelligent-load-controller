@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/_common.sh"
+
+target="${1:-all}"
+case "${target}" in
+  backend)
+    require_python
+    python_bin="$(ilc_python)"
+    "${python_bin}" -m ruff format --check "${ILC_ROOT_DIR}/custom_components" "${ILC_ROOT_DIR}/tests" "${ILC_ROOT_DIR}/scripts"
+    "${python_bin}" -m ruff check "${ILC_ROOT_DIR}/custom_components" "${ILC_ROOT_DIR}/tests" "${ILC_ROOT_DIR}/scripts"
+    "${python_bin}" -m mypy "${ILC_ROOT_DIR}/custom_components" "${ILC_ROOT_DIR}/tests" "${ILC_ROOT_DIR}/scripts"
+    ;;
+  frontend)
+    require_node
+    require_frontend_install
+    npm --prefix "${ILC_ROOT_DIR}/frontend" run lint
+    ;;
+  all)
+    "${SCRIPT_DIR}/lint" backend
+    "${SCRIPT_DIR}/lint" frontend
+    ;;
+  *)
+    printf 'Usage: %s [backend|frontend|all]\n' "$0" >&2
+    exit 2
+    ;;
+esac

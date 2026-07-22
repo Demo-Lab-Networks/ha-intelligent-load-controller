@@ -1,0 +1,12 @@
+{
+  "domain": "intelligent_load_controller",
+  "name": "Intelligent Load Controller",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://github.com/OWNER/ha-intelligent-load-controller",
+  "integration_type": "hub",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/OWNER/ha-intelligent-load-controller/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}
