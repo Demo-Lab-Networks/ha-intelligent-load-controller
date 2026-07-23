@@ -54,7 +54,7 @@ async def async_get_config_entry_diagnostics(
     config = await runtime.async_configuration_read()
     return async_redact_data(
         {
-            "integration": {"domain": DOMAIN, "entry_id": entry.entry_id, "version": "0.1.0"},
+            "integration": {"domain": DOMAIN, "entry_id": entry.entry_id, "version": "0.2.0"},
             "site": config["site"],
             "loads": config["loads"],
             "report": report,

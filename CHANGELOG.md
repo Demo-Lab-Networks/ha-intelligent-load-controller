@@ -8,7 +8,7 @@ All notable changes will be documented here. The project intends to follow [Keep
 
 - No entries yet.
 
-## [0.1.0] - Unreleased development build
+## [0.2.0] - Initial 0.2 baseline
 
 ### Added
 
