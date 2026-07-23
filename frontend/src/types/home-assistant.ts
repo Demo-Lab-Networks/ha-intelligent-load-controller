@@ -37,3 +37,8 @@ export interface PanelRoute {
   path?: string;
   prefix?: string;
 }
+
+/** Minimal custom-panel metadata Home Assistant injects for sidebar panels. */
+export interface PanelInfo {
+  config?: Record<string, unknown>;
+}

@@ -27,6 +27,7 @@ import type {
 import type {
   HomeAssistant,
   HomeAssistantUnsubscribe,
+  PanelInfo,
   PanelRoute,
 } from "../types/home-assistant";
 import { formatCurrencyRate, formatDateTime, formatMeasurement } from "../utils/format";
@@ -525,6 +526,12 @@ export class IntelligentLoadControllerPanel extends LitElement {
 
   /** Home Assistant injects this property when it instantiates the panel. */
   @property({ attribute: false }) public hass?: HomeAssistant;
+
+  /** Home Assistant injects the current layout width mode for custom panels. */
+  @property({ attribute: false }) public narrow?: boolean;
+
+  /** Home Assistant injects custom-panel metadata and config. */
+  @property({ attribute: false }) public panel?: PanelInfo;
 
   /** Home Assistant injects this property whenever panel routing changes. */
   @property({ attribute: false }) public route?: PanelRoute;
