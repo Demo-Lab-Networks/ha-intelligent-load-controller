@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Intelligent Load Controller Phase 1 Shell Prototype</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --ilc-space-2: 0.5rem;
+        --ilc-space-3: 0.75rem;
+        --ilc-space-4: 1rem;
+        --ilc-space-5: 1.5rem;
+        --ilc-radius-card: 1rem;
+        --ilc-bg: Canvas;
+        --ilc-panel: color-mix(in srgb, Canvas 92%, CanvasText 8%);
+        --ilc-subtle: color-mix(in srgb, Canvas 86%, CanvasText 14%);
+        --ilc-text: CanvasText;
+        --ilc-muted: color-mix(in srgb, CanvasText 66%, Canvas);
+        --ilc-border: color-mix(in srgb, CanvasText 20%, Canvas);
+        --ilc-accent: #0b7fab;
+        --ilc-solar: #d99a00;
+        --ilc-grid: #64748b;
+        --ilc-controlled: #0b7fab;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      body {
+        background: var(--ilc-bg);
+        color: var(--ilc-text);
+        margin: 0;
+      }
+      .shell {
+        display: grid;
+        gap: var(--ilc-space-4);
+        margin: 0 auto;
+        max-width: 1160px;
+        padding: clamp(1rem, 3vw, 2rem);
+      }
+      header,
+      section,
+      nav {
+        background: var(--ilc-panel);
+        border: 1px solid var(--ilc-border);
+        border-radius: var(--ilc-radius-card);
+        padding: var(--ilc-space-4);
+      }
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+      .muted {
+        color: var(--ilc-muted);
+      }
+      .nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--ilc-space-2);
+      }
+      .nav a,
+      .button {
+        border-radius: 999px;
+        color: inherit;
+        min-height: 44px;
+        padding: 0.65rem 1rem;
+        text-decoration: none;
+      }
+      .nav a[aria-current="page"],
+      .button {
+        background: var(--ilc-accent);
+        color: white;
+      }
+      .overview-grid {
+        display: grid;
+        gap: var(--ilc-space-4);
+        grid-template-columns: minmax(0, 1.5fr) minmax(18rem, 0.8fr);
+      }
+      .hero {
+        display: grid;
+        gap: var(--ilc-space-3);
+      }
+      .hero strong {
+        display: block;
+        font-size: clamp(1.75rem, 4vw, 3rem);
+        line-height: 1;
+      }
+      .flow {
+        display: grid;
+        gap: var(--ilc-space-3);
+      }
+      .flow-row {
+        align-items: center;
+        display: grid;
+        gap: var(--ilc-space-3);
+        grid-template-columns: 7rem 1fr 7rem;
+      }
+      .bar {
+        background: var(--ilc-subtle);
+        border-radius: 999px;
+        min-height: 0.75rem;
+        overflow: hidden;
+      }
+      .bar span {
+        background: var(--ilc-solar);
+        display: block;
+        min-height: 0.75rem;
+        width: 68%;
+      }
+      .loads {
+        display: grid;
+        gap: var(--ilc-space-3);
+      }
+      .load-card {
+        background: var(--ilc-subtle);
+        border-radius: 0.875rem;
+        padding: var(--ilc-space-4);
+      }
+      @media (max-width: 720px) {
+        .overview-grid {
+          grid-template-columns: 1fr;
+        }
+        .shell {
+          padding-bottom: 5rem;
+        }
+        .nav {
+          border-radius: 1rem 1rem 0 0;
+          bottom: 0;
+          left: 0;
+          position: fixed;
+          right: 0;
+          z-index: 1;
+        }
+        .nav a {
+          flex: 1;
+          padding-inline: 0.4rem;
+          text-align: center;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <p class="muted">Load Control · Home</p>
+        <h1>Overview</h1>
+      </header>
+      <nav class="nav" aria-label="Load Control destinations">
+        <a aria-current="page" href="#">Overview</a>
+        <a href="#">Loads</a>
+        <a href="#">Plan</a>
+        <a href="#">Insights</a>
+        <a href="#">Settings</a>
+      </nav>
+      <div class="overview-grid">
+        <section class="hero">
+          <p class="muted">Home Status</p>
+          <strong>Using excess solar</strong>
+          <p>Hot Water is heating at 3.6 kW. All targets are on track. EV charging is planned for the free period at 11:00.</p>
+          <p><button class="button" type="button">Explain decision</button></p>
+        </section>
+        <section>
+          <h2>Attention</h2>
+          <p class="muted">No faults or target risks.</p>
+        </section>
+      </div>
+      <section class="flow" aria-labelledby="flow-title">
+        <h2 id="flow-title">Live energy flow</h2>
+        <div class="flow-row">
+          <span>Solar 5.2 kW</span>
+          <div class="bar"><span></span></div>
+          <span>Controlled 3.6 kW</span>
+        </div>
+        <p class="muted">Solar is supplying the controlled load and home demand; the remainder is exporting.</p>
+      </section>
+      <section class="loads">
+        <h2>Active and upcoming loads</h2>
+        <article class="load-card">
+          <strong>Hot Water</strong>
+          <p class="muted">Heating from solar · 3.6 kW · ready by morning guarantee</p>
+        </article>
+        <article class="load-card">
+          <strong>EV Charger</strong>
+          <p class="muted">Waiting for free period · starts 11:00 · target on track</p>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>
+
