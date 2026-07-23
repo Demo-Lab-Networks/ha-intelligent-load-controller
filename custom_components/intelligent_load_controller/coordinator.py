@@ -2910,16 +2910,20 @@ class SiteCoordinator:
                 "unit": "W",
                 "quality": "measured",
             }
-        phase_payload = {
-            f"phase_{phase.lower()}_power": {
+        phase_pairs = (
+            snapshot.phase_import_w.items()
+            if isinstance(snapshot.phase_import_w, Mapping)
+            else snapshot.phase_import_w
+        )
+        for phase, value in phase_pairs:
+            phase_key = phase.lower()
+            if phase_key not in {"a", "b", "c"}:
+                continue
+            payload[f"phase_{phase_key}_power"] = {
                 "value": round(float(value), 3),
                 "unit": "W",
                 "quality": "measured",
             }
-            for phase, value in snapshot.phase_import_w
-            if phase.lower() in {"a", "b", "c"}
-        }
-        payload.update(phase_payload)
         return payload
 
     def _site_summary_presentation(
