@@ -238,6 +238,9 @@ async def test_load_list_exposes_backend_card_presentation_fields(
         confirmed_state=True,
         active_power_w=1234.5678,
     )
+    coordinator._recovery.setdefault("load_runtime", {}).setdefault(load_id, {})[  # noqa: SLF001
+        "confirmed_runtime_today_h"
+    ] = 0.25
     coordinator._last_plan = {  # noqa: SLF001
         "intervals": [
             {
@@ -246,7 +249,16 @@ async def test_load_list_exposes_backend_card_presentation_fields(
                 "end_at": (scheduled_at + timedelta(minutes=30)).isoformat(),
                 "reason_code": "lowest_cost_window",
             }
-        ]
+        ],
+        "loads": [
+            {
+                "load_id": load_id,
+                "required_slots": 6,
+                "scheduled_slots": 3,
+                "unmet_slots": 3,
+                "reason_codes": ["deadline_impossible"],
+            }
+        ],
     }
 
     listed = await coordinator.async_load_list()
@@ -257,6 +269,13 @@ async def test_load_list_exposes_backend_card_presentation_fields(
     assert load_summary["next_action_at"] == scheduled_at.isoformat()
     assert load_summary["next_action_kind"] == "start"
     assert load_summary["next_action_reason_code"] == "lowest_cost_window"
+    assert load_summary["progress"] == {
+        "current": 15.0,
+        "target": 30.0,
+        "unit": "min",
+        "percent": 50.0,
+    }
+    assert load_summary["target_status"] == "impossible"
 
 
 async def test_site_rejects_duplicate_actuator_bindings_in_writes_and_previews(

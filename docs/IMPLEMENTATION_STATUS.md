@@ -10,7 +10,7 @@
 - Home Assistant config entry and `load` config-subentry flows, one canonical validator, revisions/conflict errors, bounded Store recovery, observation-first lifecycle, adapters, entities, actions, diagnostics, repairs, system health, migrations, and authenticated versioned WebSocket API. Cross-load actuator ownership is guarded, and legacy collisions fail closed.
 - Local Lit/Vite/ECharts panel with typed WebSocket client, route-aware shell foundation, site/load routing, plans/timelines/history/configuration/override controls, scoped live updates, revision handling, responsive layout, and native `Intl` formatting.
 - UX Phase 1 shell work has extracted route-level Overview, Loads, load detail, Plan, Insights, Settings, and Diagnostics presentation modules plus shared load-summary and plan-table components; backend/API orchestration and shared route state remain in the root panel during migration.
-- UX Phase 2 Overview starter work has replaced the equal-weight metric wall with a Home Status hero, energy-flow summary, backend-ranked attention feed for warnings/manual overrides/runtime actuator faults/invalid load configuration, focused Today KPIs, compressed Today timeline, grouped active/upcoming loads, and contextual/type-aware load summary cards with deterministic presentation helpers. Backend load summaries now feed measured current power, configured deadlines, runtime fault state, and structured next planned start/stop actions into those cards.
+- UX Phase 2 Overview starter work has replaced the equal-weight metric wall with a Home Status hero, energy-flow summary, backend-ranked attention feed for warnings/manual overrides/runtime actuator faults/invalid load configuration, focused Today KPIs, compressed Today timeline, grouped active/upcoming loads, and contextual/type-aware load summary cards with deterministic presentation helpers. Backend load summaries now feed measured current power, configured deadlines, runtime fault state, target progress/status, and structured next planned start/stop actions into those cards.
 - The Loads page now adds local read-only catalogue search, status/type filtering, needs/active/deadline/priority/power/name sorting, and status/type/area/priority grouping over backend load summaries.
 - Vitest component/API tests plus Playwright + axe browser accessibility smoke tests using a simulated Home Assistant facade.
 
@@ -19,13 +19,13 @@
 | Check | Result |
 | --- | --- |
 | Targeted backend syntax for current UX slice | `python3 -m py_compile custom_components/intelligent_load_controller/coordinator.py tests/integration/test_coordinator.py tests/websocket/test_websocket_api.py` passed |
-| Python 3.13 + Home Assistant Core 2025.4.0 backend harness | Targeted `scripts/test-backend tests/integration/test_coordinator.py tests/websocket/test_websocket_api.py -q` is blocked in the current shell because no Python 3.13 interpreter is available; the previous isolated Python 3.13 baseline remains Ruff/MyPy clean with `pytest -q` **46 passed** before this slice |
-| Frontend | TypeScript check clean; Vitest **35 passed** across 7 files; committed local bundle rebuilt and bundle validator passed at 1,690,855 bytes |
+| Python 3.13 + Home Assistant Core 2025.4.0 backend harness | Targeted `scripts/test-backend tests/integration/test_coordinator.py::test_load_list_exposes_backend_card_presentation_fields -q` is blocked in the current shell because no Python 3.13 interpreter is available; syntax/Ruff checks passed locally and GitHub CI provides the Python 3.13 harness after push |
+| Frontend | TypeScript check clean; Vitest **36 passed** across 7 files; committed local bundle rebuilt and bundle validator passed at 1,690,855 bytes |
 | Browser accessibility and production-bundle smoke tests | Playwright + axe/production bundle **4 passed** |
 | UX Phase 1 shell evidence | 22 local fixture screenshots captured for shell routes, light/dark themes, and required overview viewport sizes |
 | Pure control engine | Five deterministic default simulation reports passed, including fail-closed input outage and 20-load arbitration |
 
-The previous full backend checks were run in an isolated Python 3.13 container with Home Assistant Core 2025.4.0. The current shell does not expose Python 3.13, so the current backend attention-slice harness tests are recorded as blocked after syntax compilation. Browser and frontend checks use the repository's locked frontend dependencies; the latest frontend checks were run under Node 22.23.0. All automated evidence uses simulated entities only.
+The current shell does not expose Python 3.13, so the current backend progress/status harness test is recorded as blocked after syntax and Ruff checks. Browser and frontend checks use the repository's locked frontend dependencies; the latest frontend checks were run under Node 22.23.0. All automated evidence uses simulated entities only.
 
 ## Not a release assertion
 

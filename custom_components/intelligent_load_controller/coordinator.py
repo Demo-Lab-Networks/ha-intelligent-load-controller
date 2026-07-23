@@ -2860,9 +2860,7 @@ class SiteCoordinator:
 
         if not isinstance(load_id, str):
             return None
-        runtime = self._mapping_or_empty(
-            self._mapping_or_empty(self._recovery.get("load_runtime")).get(load_id)
-        )
+        runtime = self._load_runtime_for(load_id)
         fault_state = runtime.get("fault_state")
         return fault_state if isinstance(fault_state, str) and fault_state else None
 
@@ -2876,8 +2874,21 @@ class SiteCoordinator:
         deadline = self._load_deadline_at(config)
         if deadline is not None:
             presentation["deadline"] = deadline
+        progress = self._load_target_progress(config, load_id)
+        if progress is not None:
+            presentation["progress"] = progress
+        target_status = self._load_target_status(config, load_id, progress)
+        if target_status is not None:
+            presentation["target_status"] = target_status
         presentation.update(self._next_plan_action_for_load(load_id))
         return presentation
+
+    def _load_runtime_for(self, load_id: str) -> dict[str, Any]:
+        """Return bounded persisted runtime evidence for one load."""
+
+        return self._mapping_or_empty(
+            self._mapping_or_empty(self._recovery.get("load_runtime")).get(load_id)
+        )
 
     def _load_current_power_w(self, load_id: str) -> float | None:
         """Return current measured load power for panel display, if available."""
@@ -2898,6 +2909,179 @@ class SiteCoordinator:
             requirements.get("deadline_at") or requirements.get("deadline")
         )
         return deadline.isoformat() if deadline is not None else None
+
+    def _load_target_progress(
+        self, config: Mapping[str, Any], load_id: str
+    ) -> dict[str, Any] | None:
+        """Return display-safe target progress using feedback/recovery evidence."""
+
+        requirements = self._mapping_or_empty(config.get("requirements"))
+        runtime = self._load_runtime_for(load_id)
+        feedback = self._feedback.get(load_id)
+
+        target_soc = self._as_positive(requirements.get("target_soc_pct"))
+        if target_soc is not None:
+            current_soc = self._first_nonnegative(
+                feedback.state_of_charge_pct if feedback is not None else None,
+                runtime.get("state_of_charge_pct"),
+            )
+            if current_soc is not None:
+                return self._progress_payload(current_soc, target_soc, "%")
+
+        target_temperature = self._as_nonnegative(requirements.get("target_temperature_c"))
+        if target_temperature is not None:
+            current_temperature = self._first_nonnegative(
+                feedback.temperature_c if feedback is not None else None,
+                runtime.get("temperature_c"),
+            )
+            if current_temperature is not None:
+                return self._progress_payload(
+                    current_temperature,
+                    target_temperature,
+                    "°C",
+                    include_percent=False,
+                )
+
+        energy_target_kwh = self._as_positive(requirements.get("minimum_energy_kwh"))
+        energy_target_wh = self._first_positive(
+            requirements.get("minimum_energy_wh"),
+            requirements.get("target_energy_wh"),
+            energy_target_kwh * 1000 if energy_target_kwh is not None else None,
+        )
+        if energy_target_wh is not None:
+            completed_energy_kwh = self._nonnegative_number(runtime.get("energy_today_kwh"))
+            return self._progress_payload(completed_energy_kwh, energy_target_wh / 1000, "kWh")
+
+        runtime_target_s = self._first_positive(
+            requirements.get("minimum_confirmed_runtime_s"),
+            requirements.get("minimum_runtime_s"),
+            requirements.get("target_runtime_s"),
+        )
+        if runtime_target_s is not None:
+            completed_runtime_s = (
+                self._nonnegative_number(runtime.get("confirmed_runtime_today_h")) * 3600
+            )
+            return self._progress_payload(completed_runtime_s / 60, runtime_target_s / 60, "min")
+
+        return None
+
+    def _load_target_status(
+        self,
+        config: Mapping[str, Any],
+        load_id: str,
+        progress: Mapping[str, Any] | None,
+    ) -> str | None:
+        """Return backend-owned target health for load-card presentation."""
+
+        if self._progress_complete(progress):
+            return "complete"
+
+        plan_result = self._load_plan_result(load_id)
+        if plan_result:
+            unmet_slots = self._nonnegative_number(plan_result.get("unmet_slots"))
+            reason_codes = plan_result.get("reason_codes")
+            if unmet_slots > 0:
+                if isinstance(reason_codes, list) and "deadline_impossible" in reason_codes:
+                    return "impossible"
+                return "at_risk"
+            if self._nonnegative_number(plan_result.get("required_slots")) > 0:
+                return "on_track"
+
+        requirements = self._mapping_or_empty(config.get("requirements"))
+        deadline = self._parse_deadline(
+            requirements.get("deadline_at") or requirements.get("deadline")
+        )
+        if deadline is not None and deadline <= datetime.now(UTC):
+            return "at_risk"
+
+        if progress is not None or self._load_has_target(config):
+            return "unknown"
+        return None
+
+    def _load_plan_result(self, load_id: str) -> dict[str, Any]:
+        """Return serialized backend plan evidence for one load, if available."""
+
+        if not self._last_plan:
+            return {}
+        loads = self._last_plan.get("loads")
+        if not isinstance(loads, list):
+            return {}
+        for item in loads:
+            if isinstance(item, Mapping) and item.get("load_id") == load_id:
+                return self._mapping_or_empty(item)
+        return {}
+
+    def _load_has_target(self, config: Mapping[str, Any]) -> bool:
+        """Return whether the load has a configured target/deadline requirement."""
+
+        requirements = self._mapping_or_empty(config.get("requirements"))
+        has_quantity_target = (
+            any(
+                self._as_positive(requirements.get(field)) is not None
+                for field in (
+                    "minimum_confirmed_runtime_s",
+                    "minimum_runtime_s",
+                    "target_runtime_s",
+                    "minimum_energy_wh",
+                    "target_energy_wh",
+                    "minimum_energy_kwh",
+                    "target_soc_pct",
+                )
+            )
+            or self._as_nonnegative(requirements.get("target_temperature_c")) is not None
+        )
+        deadline = self._parse_deadline(
+            requirements.get("deadline_at") or requirements.get("deadline")
+        )
+        return has_quantity_target or deadline is not None
+
+    @classmethod
+    def _first_nonnegative(cls, *values: object) -> float | None:
+        """Return the first finite non-negative observation from trusted inputs."""
+
+        for value in values:
+            number = cls._as_nonnegative(value)
+            if number is not None:
+                return number
+        return None
+
+    @staticmethod
+    def _progress_payload(
+        current: float,
+        target: float,
+        unit: str,
+        *,
+        include_percent: bool = True,
+    ) -> dict[str, Any]:
+        """Build a bounded load-progress display payload."""
+
+        payload: dict[str, Any] = {
+            "current": round(max(0.0, current), 3),
+            "target": round(max(0.0, target), 3),
+            "unit": unit,
+        }
+        if include_percent and target > 0:
+            payload["percent"] = round(min(100.0, max(0.0, current / target * 100)), 1)
+        return payload
+
+    @staticmethod
+    def _progress_complete(progress: Mapping[str, Any] | None) -> bool:
+        """Return whether a progress payload demonstrates target completion."""
+
+        if progress is None:
+            return False
+        percent = progress.get("percent")
+        if isinstance(percent, int | float) and isfinite(float(percent)):
+            return float(percent) >= 100
+        current = progress.get("current")
+        target = progress.get("target")
+        return (
+            isinstance(current, int | float)
+            and isinstance(target, int | float)
+            and isfinite(float(current))
+            and isfinite(float(target))
+            and float(current) >= float(target)
+        )
 
     def _next_plan_action_for_load(self, load_id: str) -> dict[str, str]:
         """Return the next planned start/stop for a load from the stored plan."""

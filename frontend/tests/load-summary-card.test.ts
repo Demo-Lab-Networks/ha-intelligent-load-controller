@@ -45,4 +45,21 @@ describe("ilc-load-summary-card", () => {
     expect(card.textContent).toContain("Start");
     expect(card.textContent).toContain("This is the lowest-cost valid window.");
   });
+
+  it("renders backend target progress with an accessible progress bar", async () => {
+    const card = document.createElement("ilc-load-summary-card") as IlcLoadSummaryCard;
+    card.hass = hass;
+    card.load = load({
+      progress: { current: 15, target: 30, unit: "min", percent: 50 },
+      target_status: "at_risk",
+    });
+    document.body.append(card);
+
+    await card.updateComplete;
+
+    const progress = card.querySelector('[role="progressbar"]');
+    expect(card.textContent).toContain("50%");
+    expect(card.textContent).toContain("Target at risk");
+    expect(progress?.getAttribute("aria-valuenow")).toBe("50");
+  });
 });
