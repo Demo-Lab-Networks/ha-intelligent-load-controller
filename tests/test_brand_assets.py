@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from subprocess import run
 import sys
+from subprocess import run
 
 
 def test_brand_asset_validator_passes() -> None:
