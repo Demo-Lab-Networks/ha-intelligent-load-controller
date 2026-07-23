@@ -328,10 +328,25 @@ function attentionCopyForCode(code: string): { titleKey: MessageKey; summaryKey:
         titleKey: "overview.attention.configurationInvalid",
         summaryKey: "overview.attention.configurationInvalidSummary",
       };
+    case "load_configuration_invalid":
+      return {
+        titleKey: "overview.attention.loadConfigurationInvalid",
+        summaryKey: "overview.attention.loadConfigurationInvalidSummary",
+      };
     case "input_missing":
       return {
         titleKey: "overview.attention.inputMissing",
         summaryKey: "overview.attention.inputMissingSummary",
+      };
+    case "actuator_unavailable":
+      return {
+        titleKey: "overview.attention.actuatorUnavailable",
+        summaryKey: "overview.attention.actuatorUnavailableSummary",
+      };
+    case "actuator_feedback_mismatch":
+      return {
+        titleKey: "overview.attention.feedbackMismatch",
+        summaryKey: "overview.attention.feedbackMismatchSummary",
       };
     case "manual_indefinite_override":
       return {

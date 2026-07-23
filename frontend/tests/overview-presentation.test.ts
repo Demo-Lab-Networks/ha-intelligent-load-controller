@@ -206,6 +206,50 @@ describe("overview presentation", () => {
     });
   });
 
+  it("maps backend load fault attention codes to specific user-facing copy", () => {
+    const presentation = createOverviewPresentation({
+      site: {
+        ...baseSite,
+        attention: [
+          {
+            id: "load:hws:actuator_feedback_mismatch",
+            code: "actuator_feedback_mismatch",
+            rank: 1,
+            severity: "critical",
+            affected_kind: "load",
+            affected_id: "hws",
+            display_name: "Hot water",
+            action: "load_detail",
+          },
+          {
+            id: "load:invalid:0:load_configuration_invalid",
+            code: "load_configuration_invalid",
+            rank: 9,
+            severity: "warning",
+            affected_kind: "load",
+            display_name: "Broken load",
+            action: "settings",
+          },
+        ],
+      },
+      loads: [],
+    });
+
+    expect(presentation.attention.map((item) => item.titleKey)).toEqual([
+      "overview.attention.feedbackMismatch",
+      "overview.attention.loadConfigurationInvalid",
+    ]);
+    expect(presentation.attention[0]).toMatchObject({
+      summaryKey: "overview.attention.feedbackMismatchSummary",
+      affectedLoadId: "hws",
+      action: "load_detail",
+    });
+    expect(presentation.attention[1]).toMatchObject({
+      summaryKey: "overview.attention.loadConfigurationInvalidSummary",
+      action: "settings",
+    });
+  });
+
   it("creates a compressed today timeline from backend intervals without inventing decisions", () => {
     const timeline = createTodayTimelinePresentation(
       [

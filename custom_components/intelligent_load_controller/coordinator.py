@@ -1660,8 +1660,12 @@ class SiteCoordinator:
             if config.get("invalid"):
                 result.append(
                     {
+                        "load_id": config.get("load_id"),
                         "name": config["display_name"],
                         "state": "fault",
+                        "reason_code": "load_configuration_invalid",
+                        "automatic_control": False,
+                        "fault": True,
                         "validation": config["invalid"],
                     }
                 )
@@ -1679,6 +1683,7 @@ class SiteCoordinator:
                     "state": self._load_state(config, override),
                     "reason_code": self._load_reason(config, override),
                     "override": override,
+                    "fault": self._load_runtime_fault(load_id) is not None,
                     "config_revision": config["config_revision"],
                 }
             )
@@ -2848,6 +2853,17 @@ class SiteCoordinator:
             return "automatic_control_disabled"
         return "restart_stabilisation" if not self._started else "waiting_for_plan"
 
+    def _load_runtime_fault(self, load_id: object) -> str | None:
+        """Return the persisted runtime fault code for a configured load, if any."""
+
+        if not isinstance(load_id, str):
+            return None
+        runtime = self._mapping_or_empty(
+            self._mapping_or_empty(self._recovery.get("load_runtime")).get(load_id)
+        )
+        fault_state = runtime.get("fault_state")
+        return fault_state if isinstance(fault_state, str) and fault_state else None
+
     def _plan_for_load(self, load_id: str) -> list[dict[str, Any]]:
         if not self._last_plan:
             return []
@@ -2977,6 +2993,45 @@ class SiteCoordinator:
             if action is not None:
                 item["action"] = action
             items.append(item)
+
+        for index, load_config in enumerate(load_configs):
+            display_name = str(
+                load_config.get("display_name")
+                or load_config.get("name")
+                or load_config.get("load_id")
+                or "Load"
+            )
+            load_id = load_config.get("load_id")
+            load_id_text = load_id if isinstance(load_id, str) else None
+            if load_config.get("invalid"):
+                add(
+                    item_id=(
+                        f"load:{load_id_text}:load_configuration_invalid"
+                        if load_id_text
+                        else f"load:invalid:{index}:load_configuration_invalid"
+                    ),
+                    code="load_configuration_invalid",
+                    rank=9,
+                    severity="warning",
+                    affected_kind="load",
+                    affected_id=load_id_text,
+                    display_name=display_name,
+                    action="settings",
+                )
+                continue
+            runtime_fault = self._load_runtime_fault(load_id_text)
+            if runtime_fault is not None:
+                add(
+                    item_id=f"load:{load_id_text}:{runtime_fault}",
+                    code=runtime_fault,
+                    rank=1,
+                    severity="critical",
+                    affected_kind="load",
+                    affected_id=load_id_text,
+                    display_name=display_name,
+                    action="load_detail",
+                    reason_code=runtime_fault,
+                )
 
         for load_id in sorted(self._conflicting_actuator_load_ids):
             add(

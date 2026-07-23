@@ -16,6 +16,7 @@ All notable changes will be documented here. The project intends to follow [Keep
 - Compressed Overview Today timeline component backed by the existing read-only `daily_timeline` WebSocket command.
 - Deterministic load-card presentation helper with type-aware HWS, EV, battery, and generic load vocabulary.
 - Deterministic load-catalogue presentation helper with local search, status/type filters, sort modes, and status/type/area/priority grouping.
+- Backend-ranked attention items for persisted runtime actuator faults and invalid load configurations.
 
 ### Changed
 
@@ -27,6 +28,7 @@ All notable changes will be documented here. The project intends to follow [Keep
 - Plan route data loading now distinguishes the full current plan from the lightweight Overview timeline preload.
 - Load summary cards now emphasise priority metrics, target/override/automatic badges, backend reason codes, and contextual non-actuating primary actions.
 - Loads page now renders searchable, sortable, filterable grouped catalogue controls over read-only backend load summaries.
+- Load summaries now expose a read-only `fault` flag when persisted runtime fault evidence exists.
 
 ### Fixed
 

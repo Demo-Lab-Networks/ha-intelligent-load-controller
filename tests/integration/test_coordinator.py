@@ -129,6 +129,25 @@ async def test_site_summary_exposes_backend_ranked_attention_items(
     second_config = dict(load_config)
     second_config["display_name"] = "Second load"
     second = await coordinator.async_add_load(second_config)
+    fault_config = dict(load_config)
+    fault_config["display_name"] = "Faulted load"
+    faulted = await coordinator.async_add_load(fault_config)
+    runtime_by_load = coordinator._recovery.setdefault(  # noqa: SLF001
+        "load_runtime",
+        {},
+    )
+    runtime_by_load.setdefault(faulted["load_id"], {})["fault_state"] = (
+        "actuator_unavailable"
+    )
+    hass.config_entries.async_add_subentry(
+        load_control_config_entry,
+        ConfigSubentry(
+            data=MappingProxyType({"display_name": "", "load_type": "not_supported"}),
+            subentry_type=LOAD_SUBENTRY_TYPE,
+            title="Broken load",
+            unique_id="broken-load",
+        ),
+    )
 
     await coordinator.async_start_override(first["load_id"], "on", indefinite=True)
     await coordinator.async_start_override(
@@ -149,8 +168,28 @@ async def test_site_summary_exposes_backend_ranked_attention_items(
             "action": item.get("action"),
         }
         for item in attention
-        if item["code"] in {"manual_indefinite_override", "manual_timed_boost"}
+        if item["code"]
+        in {
+            "actuator_unavailable",
+            "load_configuration_invalid",
+            "manual_indefinite_override",
+            "manual_timed_boost",
+        }
     } == {
+        "actuator_unavailable": {
+            "rank": 1,
+            "severity": "critical",
+            "affected_kind": "load",
+            "affected_id": faulted["load_id"],
+            "action": "load_detail",
+        },
+        "load_configuration_invalid": {
+            "rank": 9,
+            "severity": "warning",
+            "affected_kind": "load",
+            "affected_id": None,
+            "action": "settings",
+        },
         "manual_indefinite_override": {
             "rank": 5,
             "severity": "warning",
@@ -166,6 +205,17 @@ async def test_site_summary_exposes_backend_ranked_attention_items(
             "action": "load_detail",
         },
     }
+    listed = await coordinator.async_load_list()
+    assert any(
+        item["load_id"] == faulted["load_id"] and item["fault"] is True for item in listed
+    )
+    assert any(
+        item["name"] == "Broken load"
+        and item["state"] == "fault"
+        and item["reason_code"] == "load_configuration_invalid"
+        and item["fault"] is True
+        for item in listed
+    )
 
 
 async def test_site_rejects_duplicate_actuator_bindings_in_writes_and_previews(

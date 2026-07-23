@@ -25,7 +25,8 @@
 - Preserved optional chart failure fallback and the existing locally bundled ECharts snapshot.
 - Preserved the backend authority boundary: the frontend uses typed backend fields, stable controller state, target status, manual override state, measurements, and reason codes. It does not calculate safety, allocation, deadlines, or action eligibility.
 - Fixed the frontend API facade to preserve optional `site_summary` fields already represented in the model/harness: grid import/export, solar production, cost/energy today, and next deadline.
-- Added a first optional V1 `site_summary.attention[]` backend presentation field. The coordinator now ranks current warnings and manual overrides with stable code, reason code, severity, affected object, and action destination; the Overview prefers this feed when present and keeps the previous typed-field fallback for compatibility.
+- Added a first optional V1 `site_summary.attention[]` backend presentation field. The coordinator now ranks current warnings, manual overrides, persisted runtime actuator faults, and invalid load configurations with stable code, reason code, severity, affected object, and action destination; the Overview prefers this feed when present and keeps the previous typed-field fallback for compatibility.
+- Added a read-only `fault` flag to load summaries when persisted runtime fault evidence exists, allowing the card/list presentation to surface actuator failure without changing control policy.
 - Added a resilient Overview `ilc-today-timeline` component. It renders backend-provided plan intervals as a compact visual strip, keeps a screen-reader/text summary, opens affected loads or the full Plan route, and leaves the dashboard usable when the timeline read is unavailable.
 
 No planner, electrical safety, actuator, override, or optimisation semantics were changed.
@@ -47,9 +48,9 @@ No planner, electrical safety, actuator, override, or optimisation semantics wer
 | Check | Result |
 | --- | --- |
 | `npm --prefix frontend run typecheck` under Node 22.23.0 | Passed |
-| `npm --prefix frontend run test` under Node 22.23.0 | 6 files passed; 33 tests passed |
+| `npm --prefix frontend run test` under Node 22.23.0 | 6 files passed; 34 tests passed |
 | `npm --prefix frontend run test:e2e` under Node 22.23.0 | 4 Playwright tests passed |
-| `scripts/build-frontend` under Node 22.23.0 and `scripts/validate-frontend-bundle` | Passed; bundle size 1,688,698 bytes |
+| `scripts/build-frontend` under Node 22.23.0 and `scripts/validate-frontend-bundle` | Passed; bundle size 1,690,073 bytes |
 | `python3 -m py_compile custom_components/intelligent_load_controller/coordinator.py tests/integration/test_coordinator.py tests/websocket/test_websocket_api.py` | Passed |
 | `scripts/test-backend tests/integration/test_coordinator.py tests/websocket/test_websocket_api.py -q` | Blocked in this shell: Python 3.13 interpreter unavailable |
 
@@ -65,12 +66,12 @@ Browser console notes from Playwright:
 | Overview answers the seven five-second questions | Partially satisfied locally: current grid flow, running/waiting loads, target summary, attention, next action/deadline fallback, reason-code explanation, quick actions, and compressed planned intervals are visible. More backend presentation fields and live HAOS evidence remain required. |
 | No wall of equal-weight metrics remains | Satisfied for this slice: the legacy eleven-card metric wall was replaced with hero, flow, attention, and six focused KPIs. |
 | Every configured load type has an appropriate summary card | Improved but still partial: HWS, EV, battery, and generic cards now have type-aware state phrases, progress labels, badges, and contextual primary actions. Full type-specific fields still depend on future backend presentation models. |
-| Attention states are backend-authoritative | Improved but still partial: current warning and override attention now prefers backend-ranked `site_summary.attention[]` with rank/severity/action. Target-risk, impossible-target, deadline, tariff, and opportunity attention still need richer backend presentation sources before full Phase 2 exit. |
+| Attention states are backend-authoritative | Improved but still partial: warning, override, runtime actuator-fault, and invalid-load attention now prefer backend-ranked `site_summary.attention[]` with rank/severity/action. Target-risk, impossible-target, deadline, tariff, and opportunity attention still need richer backend presentation sources before full Phase 2 exit. |
 
 ## Known limits intentionally carried forward
 
 - The live energy flow uses available aggregate fields and does not yet render canonical backend `energy_flow_nodes[]`/`energy_flow_edges[]`.
-- The attention list now has a backend-ranked warning/override starter contract, but it does not yet cover all Phase 2 attention categories.
+- The attention list now has a backend-ranked warning/override/runtime-fault/invalid-load contract, but it does not yet cover all Phase 2 attention categories.
 - The Today timeline is a starter compressed interval strip. It does not yet include tariff bands, solar/export bands, actual/manual/blocked categories, deadline markers, or zoom; those remain Phase 4/plan-workspace items unless backend presentation fields arrive earlier.
 - Load cards have type-aware labels, vocabulary, badges, and primary actions, but do not yet include full HWS/EV/battery/generic backend presentation models such as SOC, temperature, source contribution, expected completion, or action eligibility.
 - Loads catalogue area grouping uses optional `load_list` area metadata when present and otherwise places loads into an explicit “No area assigned” group; full area/circuit/category grouping still needs backend presentation fields.

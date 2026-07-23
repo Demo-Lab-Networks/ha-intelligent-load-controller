@@ -60,6 +60,16 @@ describe("LoadControlApi", () => {
                 action: "diagnostics",
               },
               {
+                id: "load:hws:actuator_unavailable",
+                code: "actuator_unavailable",
+                rank: 1,
+                severity: "critical",
+                affected_kind: "load",
+                affected_id: "hws",
+                display_name: "Hot water",
+                action: "load_detail",
+              },
+              {
                 id: "ignored",
                 code: "ignored",
                 rank: "not-a-number",
@@ -77,6 +87,7 @@ describe("LoadControlApi", () => {
               state: "idle",
               reason_code: "lowest_cost_window",
               automatic_control: true,
+              fault: true,
             },
           ],
         };
@@ -97,6 +108,16 @@ describe("LoadControlApi", () => {
         attention_count: 2,
         attention: [
           {
+            id: "load:hws:actuator_unavailable",
+            code: "actuator_unavailable",
+            rank: 1,
+            severity: "critical",
+            affected_kind: "load",
+            affected_id: "hws",
+            display_name: "Hot water",
+            action: "load_detail",
+          },
+          {
             id: "site:input_missing",
             code: "input_missing",
             rank: 6,
@@ -107,7 +128,7 @@ describe("LoadControlApi", () => {
           },
         ],
       },
-      loads: [{ load_id: "hws", load_type: "hot_water", controller_state: "idle" }],
+      loads: [{ load_id: "hws", load_type: "hot_water", controller_state: "idle", fault: true }],
     });
     expect(calls).toEqual(
       expect.arrayContaining([

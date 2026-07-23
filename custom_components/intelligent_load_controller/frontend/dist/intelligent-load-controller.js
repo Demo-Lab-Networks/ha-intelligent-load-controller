@@ -718,8 +718,14 @@ var Ze = t((() => {
 		"overview.attention.duplicateActuatorSummary": "{load} shares an actuator target with another load. Repair the configuration before automatic control can resume safely.",
 		"overview.attention.configurationInvalid": "Configuration needs attention",
 		"overview.attention.configurationInvalidSummary": "{site} has configuration that needs review before normal automatic operation can continue.",
+		"overview.attention.loadConfigurationInvalid": "{load} configuration needs attention",
+		"overview.attention.loadConfigurationInvalidSummary": "This load configuration needs repair before it can be safely controlled.",
 		"overview.attention.inputMissing": "Required input unavailable",
 		"overview.attention.inputMissingSummary": "{site} has unavailable or stale input data. Automatic starts are paused where safety inputs cannot be verified.",
+		"overview.attention.actuatorUnavailable": "{load} actuator unavailable",
+		"overview.attention.actuatorUnavailableSummary": "A recent command could not reach the configured actuator. Automatic retries are slowed until recovery is confirmed.",
+		"overview.attention.feedbackMismatch": "{load} feedback not confirmed",
+		"overview.attention.feedbackMismatchSummary": "The backend did not receive fresh feedback proving the requested state, so this load needs review.",
 		"overview.attention.targetImpossible": "{load} target impossible",
 		"overview.attention.targetImpossibleSummary": "The backend reports this target cannot currently be completed as configured.",
 		"overview.attention.targetAtRisk": "{load} target at risk",
@@ -984,6 +990,8 @@ var Ze = t((() => {
 		"reason.forecast_unavailable": "Forecast data is unavailable.",
 		"reason.power_sensor_unavailable": "Power feedback is unavailable.",
 		"reason.actuator_unavailable": "The actuator is unavailable.",
+		"reason.actuator_feedback_mismatch": "The actuator command was not confirmed by fresh feedback.",
+		"reason.load_configuration_invalid": "This load configuration needs repair.",
 		"reason.feedback_not_detected": "Expected feedback was not detected.",
 		"reason.configuration_invalid": "The configuration needs attention.",
 		"reason.restart_stabilisation": "The controller is stabilising after restart."
@@ -1806,9 +1814,21 @@ function It(e) {
 			titleKey: "overview.attention.configurationInvalid",
 			summaryKey: "overview.attention.configurationInvalidSummary"
 		};
+		case "load_configuration_invalid": return {
+			titleKey: "overview.attention.loadConfigurationInvalid",
+			summaryKey: "overview.attention.loadConfigurationInvalidSummary"
+		};
 		case "input_missing": return {
 			titleKey: "overview.attention.inputMissing",
 			summaryKey: "overview.attention.inputMissingSummary"
+		};
+		case "actuator_unavailable": return {
+			titleKey: "overview.attention.actuatorUnavailable",
+			summaryKey: "overview.attention.actuatorUnavailableSummary"
+		};
+		case "actuator_feedback_mismatch": return {
+			titleKey: "overview.attention.feedbackMismatch",
+			summaryKey: "overview.attention.feedbackMismatchSummary"
 		};
 		case "manual_indefinite_override": return {
 			titleKey: "overview.attention.indefiniteOverride",
