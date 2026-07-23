@@ -549,6 +549,85 @@ export const panelStyles = [ilcDesignTokens, css`
       font-weight: 700;
     }
 
+    .load-focus-grid {
+      display: grid;
+      gap: 0.65rem;
+      grid-template-columns: minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 1.35fr);
+    }
+
+    .load-focus-metric {
+      background: color-mix(in srgb, var(--secondary-background-color) 72%, transparent);
+      border: 1px solid color-mix(in srgb, var(--divider-color) 72%, transparent);
+      border-radius: var(--ilc-radius-md, var(--ha-card-border-radius, 0.75rem));
+      display: grid;
+      gap: 0.35rem;
+      min-inline-size: 0;
+      padding: 0.75rem;
+    }
+
+    .load-focus-metric span {
+      color: var(--secondary-text-color);
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    .load-focus-metric strong {
+      font-size: 1.05rem;
+      overflow-wrap: anywhere;
+    }
+
+    .load-focus-metric[data-kind="next"] strong {
+      font-size: 0.95rem;
+      line-height: 1.35;
+    }
+
+    .load-progress-bar {
+      background: color-mix(in srgb, var(--divider-color) 72%, transparent);
+      border-radius: var(--ilc-radius-pill);
+      block-size: 0.45rem;
+      overflow: hidden;
+    }
+
+    .load-progress-bar span {
+      background: var(--ilc-energy-controlled);
+      block-size: 100%;
+      display: block;
+    }
+
+    .load-card-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+
+    .load-badge {
+      background: var(--secondary-background-color);
+      border: 1px solid var(--divider-color);
+      border-radius: var(--ilc-radius-pill);
+      color: var(--secondary-text-color);
+      display: inline-flex;
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 0.25rem 0.55rem;
+    }
+
+    .load-badge[data-tone="success"] {
+      background: color-mix(in srgb, var(--ilc-status-success) 14%, transparent);
+      color: var(--primary-text-color);
+    }
+
+    .load-badge[data-tone="warning"] {
+      background: color-mix(in srgb, var(--ilc-status-warning) 16%, transparent);
+      color: var(--primary-text-color);
+    }
+
+    .load-badge[data-tone="danger"] {
+      background: color-mix(in srgb, var(--ilc-status-danger) 14%, transparent);
+      color: var(--primary-text-color);
+    }
+
     .state-pill {
       background: var(--secondary-background-color);
       border-radius: 999px;
@@ -930,6 +1009,10 @@ export const panelStyles = [ilcDesignTokens, css`
       }
 
       .load-meta {
+        grid-template-columns: 1fr;
+      }
+
+      .load-focus-grid {
         grid-template-columns: 1fr;
       }
 

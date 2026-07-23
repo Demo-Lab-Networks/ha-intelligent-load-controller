@@ -14,6 +14,7 @@ All notable changes will be documented here. The project intends to follow [Keep
 - UX redesign Phase 2 Overview starter slice: Home Status hero, live energy-flow summary, attention list, focused Today KPIs, grouped active/upcoming loads, and deterministic overview presentation helpers.
 - Optional V1 `site_summary.attention[]` backend presentation field for backend-ranked warning and manual-override attention items.
 - Compressed Overview Today timeline component backed by the existing read-only `daily_timeline` WebSocket command.
+- Deterministic load-card presentation helper with type-aware HWS, EV, battery, and generic load vocabulary.
 
 ### Changed
 
@@ -23,6 +24,7 @@ All notable changes will be documented here. The project intends to follow [Keep
 - Replaced the Overview equal-weight metric wall with a stronger everyday-operation hierarchy and more contextual load summary cards.
 - Overview attention now prefers backend-owned rank/severity/action data when available while preserving typed-field fallback behaviour for older summaries.
 - Plan route data loading now distinguishes the full current plan from the lightweight Overview timeline preload.
+- Load summary cards now emphasise priority metrics, target/override/automatic badges, backend reason codes, and contextual non-actuating primary actions.
 
 ### Fixed
 

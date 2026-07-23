@@ -20,6 +20,7 @@
   - a compressed Today timeline from the read-only backend `daily_timeline` endpoint, with textual summary and Plan/load navigation;
   - operational load groups: Needs attention, Running now, Starting soon, Waiting, and Complete.
 - Updated load summary cards with type labels, type icons, contextual status phrases, fewer visible metadata fields, and stronger state/fault/manual/target hierarchy.
+- Added `frontend/src/features/loads/load-card-presentation.ts` so load-card state phrases, badges, progress labels, and primary actions are deterministic, type-aware, and unit-tested instead of embedded in the card component.
 - Preserved optional chart failure fallback and the existing locally bundled ECharts snapshot.
 - Preserved the backend authority boundary: the frontend uses typed backend fields, stable controller state, target status, manual override state, measurements, and reason codes. It does not calculate safety, allocation, deadlines, or action eligibility.
 - Fixed the frontend API facade to preserve optional `site_summary` fields already represented in the model/harness: grid import/export, solar production, cost/energy today, and next deadline.
@@ -34,6 +35,7 @@ No planner, electrical safety, actuator, override, or optimisation semantics wer
 | --- | --- | --- |
 | Overview page | Legacy page module rendered metric grid, chart, and ungrouped load cards | Page composes feature mapper plus reusable Overview/energy/load components |
 | Feature layer | No `frontend/src/features/` implementation | `frontend/src/features/overview/overview-presentation.ts` |
+| Load-card presentation | Component-local conditional copy | `frontend/src/features/loads/load-card-presentation.ts` derives HWS/EV/battery/generic card vocabulary and safe primary action labels |
 | Overview components | Embedded in page/root | `frontend/src/components/overview/` and `frontend/src/components/energy/` |
 | Timeline | Table-only Plan route | Compact Overview timeline component backed by existing `daily_timeline` plus full Plan route link |
 | Load card | Generic metadata grid | Contextual/type-aware summary card |
@@ -43,9 +45,9 @@ No planner, electrical safety, actuator, override, or optimisation semantics wer
 | Check | Result |
 | --- | --- |
 | `npm --prefix frontend run typecheck` under Node 22.23.0 | Passed |
-| `npm --prefix frontend run test` under Node 22.23.0 | 4 files passed; 25 tests passed |
+| `npm --prefix frontend run test` under Node 22.23.0 | 5 files passed; 29 tests passed |
 | `npm --prefix frontend run test:e2e` under Node 22.23.0 | 4 Playwright tests passed |
-| `scripts/build-frontend && scripts/validate-frontend-bundle` | Passed; bundle size 1,668,258 bytes |
+| `scripts/build-frontend && scripts/validate-frontend-bundle` | Passed; bundle size 1,675,000 bytes |
 | `python3 -m py_compile custom_components/intelligent_load_controller/coordinator.py tests/integration/test_coordinator.py tests/websocket/test_websocket_api.py` | Passed |
 | `scripts/test-backend tests/integration/test_coordinator.py tests/websocket/test_websocket_api.py -q` | Blocked in this shell: Python 3.13 interpreter unavailable |
 
@@ -60,7 +62,7 @@ Browser console notes from Playwright:
 | --- | --- |
 | Overview answers the seven five-second questions | Partially satisfied locally: current grid flow, running/waiting loads, target summary, attention, next action/deadline fallback, reason-code explanation, quick actions, and compressed planned intervals are visible. More backend presentation fields and live HAOS evidence remain required. |
 | No wall of equal-weight metrics remains | Satisfied for this slice: the legacy eleven-card metric wall was replaced with hero, flow, attention, and six focused KPIs. |
-| Every configured load type has an appropriate summary card | Partially satisfied: HWS, EV, battery, and generic labels/vocabulary exist, but type-specific data fields depend on future backend presentation fields. |
+| Every configured load type has an appropriate summary card | Improved but still partial: HWS, EV, battery, and generic cards now have type-aware state phrases, progress labels, badges, and contextual primary actions. Full type-specific fields still depend on future backend presentation models. |
 | Attention states are backend-authoritative | Improved but still partial: current warning and override attention now prefers backend-ranked `site_summary.attention[]` with rank/severity/action. Target-risk, impossible-target, deadline, tariff, and opportunity attention still need richer backend presentation sources before full Phase 2 exit. |
 
 ## Known limits intentionally carried forward
@@ -68,7 +70,7 @@ Browser console notes from Playwright:
 - The live energy flow uses available aggregate fields and does not yet render canonical backend `energy_flow_nodes[]`/`energy_flow_edges[]`.
 - The attention list now has a backend-ranked warning/override starter contract, but it does not yet cover all Phase 2 attention categories.
 - The Today timeline is a starter compressed interval strip. It does not yet include tariff bands, solar/export bands, actual/manual/blocked categories, deadline markers, or zoom; those remain Phase 4/plan-workspace items unless backend presentation fields arrive earlier.
-- Load cards have type-aware labels and vocabulary but do not yet include full HWS/EV/battery/generic presentation models.
+- Load cards have type-aware labels, vocabulary, badges, and primary actions, but do not yet include full HWS/EV/battery/generic backend presentation models such as SOC, temperature, source contribution, expected completion, or action eligibility.
 - Plan and Insights remain largely legacy/table-oriented.
 - No live `https://home-dev.iot.delongis.net` screenshot/console evidence was captured in this slice.
 
@@ -76,5 +78,5 @@ Browser console notes from Playwright:
 
 1. Extend optional backend presentation fields for `site_summary.presentation`, additional `site_summary.attention[]` sources, and richer `load_list` display fields with schema/contract tests.
 2. Add richer backend presentation categories for timeline intervals (`kind`, source, deadline/actual/manual/blocked markers) before expanding the visual into the full Plan workspace.
-3. Continue load-card refinement once backend display fields expose target labels, source breakdown, next action metadata, and action eligibility.
+3. Continue load-card refinement once backend display fields expose target values, source breakdown, next action metadata, boost presets, and action eligibility.
 4. Capture refreshed Overview screenshots at the required Phase 2 viewports after the fixture/harness can represent HWS, EV, battery, warning, fault, override, and timeline states.

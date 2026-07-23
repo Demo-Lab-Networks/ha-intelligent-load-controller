@@ -2,12 +2,7 @@ import { html, LitElement, nothing } from "lit";
 import { property } from "lit/decorators.js";
 
 import "../../components/status/ilc-status-pill";
-import {
-  isLoadRunning,
-  loadStatusTone,
-  loadTypeIcon,
-  loadTypeLabelKey,
-} from "../../features/overview/overview-presentation";
+import { createLoadCardPresentation } from "../../features/loads/load-card-presentation";
 import { translate } from "../../i18n";
 import { localizeControllerState, localizeReasonCode } from "../../i18n/reasons";
 import type { LoadProgress, LoadSummary } from "../../models/dashboard";
@@ -27,57 +22,60 @@ export class IlcLoadSummaryCard extends LitElement {
     if (!load) {
       return nothing;
     }
+    const presentation = createLoadCardPresentation(load);
 
     return html`
-      <article class="load-card load-summary-card" aria-labelledby="load-${load.load_id}" data-tone=${loadStatusTone(load)}>
+      <article class="load-card load-summary-card" aria-labelledby="load-${load.load_id}" data-tone=${presentation.tone}>
         <div class="load-header">
           <div class="load-identity">
-            <span class="load-type-icon" aria-hidden="true">${loadTypeIcon(load.load_type)}</span>
+            <span class="load-type-icon" aria-hidden="true">${presentation.typeIcon}</span>
             <div>
               <h3 id="load-${load.load_id}">${load.name}</h3>
-              <p class="secondary">${translate(this.hass, loadTypeLabelKey(load.load_type))}</p>
+              <p class="secondary">${translate(this.hass, presentation.typeLabelKey)}</p>
             </div>
           </div>
           <ilc-status-pill
-            .tone=${loadStatusTone(load)}
+            .tone=${presentation.tone}
             .label=${localizeControllerState(this.hass, load.controller_state)}
           ></ilc-status-pill>
         </div>
-        <p class="load-state-phrase">${this.statePhrase(load)}</p>
-        <p class="reason">${localizeReasonCode(this.hass, load.reason_code)}</p>
+        <p class="load-state-phrase">${translate(this.hass, presentation.stateKey)}</p>
         ${load.fault
           ? html`<p class="fault" role="alert">${translate(this.hass, "load.fault")}</p>`
           : nothing}
-        <dl class="load-meta">
-          ${this.renderLoadMetric(
-            translate(this.hass, "load.power"),
-            formatMeasurement(this.hass, load.current_power),
+        <div class="load-focus-grid">
+          ${this.renderFocusMetric("load.power", formatMeasurement(this.hass, load.current_power), "power")}
+          ${this.renderFocusMetric(presentation.progressLabelKey, this.formatProgress(load.progress), "progress", load.progress?.percent)}
+          ${this.renderFocusMetric(
+            "load.nextAction",
+            load.next_action ?? translate(this.hass, presentation.nextActionFallbackKey),
+            "next",
           )}
-          ${this.renderLoadMetric(this.progressLabel(load), this.formatProgress(load.progress))}
-          ${this.renderLoadMetric(
-            translate(this.hass, "load.nextAction"),
-            load.next_action ?? this.nextActionFallback(load),
+        </div>
+        <div class="load-card-badges" aria-label=${translate(this.hass, "load.cardBadges")}>
+          ${presentation.badges.map(
+            (badge) => html`
+              <span class="load-badge" data-tone=${badge.tone}>
+                ${translate(this.hass, badge.labelKey)}
+              </span>
+            `,
           )}
-          ${this.renderLoadMetric(
-            translate(this.hass, "load.automatic"),
-            load.automatic_control
-              ? translate(this.hass, "value.enabled")
-              : translate(this.hass, "value.disabled"),
-          )}
-          ${load.deadline
-            ? this.renderLoadMetric(
-                translate(this.hass, "load.deadline"),
-                formatDateTime(this.hass, load.deadline),
-              )
-            : nothing}
-          ${this.renderLoadMetric(
-            translate(this.hass, "load.manual"),
-            load.manual_override ?? translate(this.hass, "value.no"),
-          )}
-        </dl>
+        </div>
+        <p class="reason">
+          <strong>${translate(this.hass, "overview.why")}:</strong>
+          ${localizeReasonCode(this.hass, load.reason_code)}
+        </p>
+        ${load.deadline
+          ? html`
+              <p class="secondary">
+                <strong>${translate(this.hass, "load.deadline")}:</strong>
+                ${formatDateTime(this.hass, load.deadline)}
+              </p>
+            `
+          : nothing}
         <div class="card-actions">
-          <button class="secondary-button" type="button" @click=${this.openLoad}>
-            ${translate(this.hass, "load.open")}
+          <button class="primary-button" type="button" @click=${this.openLoad}>
+            ${translate(this.hass, presentation.primaryActionKey)}
           </button>
           <button class="text-button" type="button" @click=${this.editLoad}>
             ${translate(this.hass, "load.edit")}
@@ -87,59 +85,31 @@ export class IlcLoadSummaryCard extends LitElement {
     `;
   }
 
-  private renderLoadMetric(label: string, value: string) {
-    return html`<div><dt>${label}</dt><dd>${value}</dd></div>`;
-  }
-
-  private statePhrase(load: LoadSummary): string {
-    if (load.fault) {
-      return translate(this.hass, "load.summary.fault");
-    }
-    if (load.target_status === "impossible") {
-      return translate(this.hass, "load.summary.impossible");
-    }
-    if (load.target_status === "at_risk") {
-      return translate(this.hass, "load.summary.atRisk");
-    }
-    if (load.manual_override?.startsWith("indefinite")) {
-      return translate(this.hass, "load.summary.manualIndefinite");
-    }
-    if (load.manual_override?.startsWith("timed")) {
-      return translate(this.hass, "load.summary.manualTimed");
-    }
-    if (!load.automatic_control) {
-      return translate(this.hass, "load.summary.notControlled");
-    }
-    if (load.target_status === "complete" || load.controller_state === "target_complete") {
-      return translate(this.hass, "load.summary.complete");
-    }
-    if (isLoadRunning(load)) {
-      return translate(this.hass, "load.summary.running");
-    }
-    return translate(this.hass, "load.summary.waiting");
-  }
-
-  private progressLabel(load: LoadSummary): string {
-    if (load.load_type.includes("ev")) {
-      return translate(this.hass, "load.progress.soc");
-    }
-    if (load.load_type.includes("hot") || load.load_type.includes("hws")) {
-      return translate(this.hass, "load.progress.readiness");
-    }
-    if (load.load_type.includes("battery")) {
-      return translate(this.hass, "load.progress.energy");
-    }
-    return translate(this.hass, "load.progress");
-  }
-
-  private nextActionFallback(load: LoadSummary): string {
-    if (load.target_status === "complete" || load.controller_state === "target_complete") {
-      return translate(this.hass, "load.nextAction.complete");
-    }
-    if (!load.automatic_control) {
-      return translate(this.hass, "load.nextAction.notControlled");
-    }
-    return translate(this.hass, "value.unavailable");
+  private renderFocusMetric(
+    labelKey: Parameters<typeof translate>[1],
+    value: string,
+    kind: "power" | "progress" | "next",
+    percent?: number,
+  ) {
+    return html`
+      <div class="load-focus-metric" data-kind=${kind}>
+        <span>${translate(this.hass, labelKey)}</span>
+        <strong>${value}</strong>
+        ${kind === "progress" && percent !== undefined
+          ? html`
+              <div
+                class="load-progress-bar"
+                role="progressbar"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow=${String(Math.round(percent))}
+              >
+                <span style=${`inline-size: ${Math.max(0, Math.min(100, percent)).toFixed(0)}%;`}></span>
+              </div>
+            `
+          : nothing}
+      </div>
+    `;
   }
 
   private formatProgress(progress: LoadProgress | undefined): string {

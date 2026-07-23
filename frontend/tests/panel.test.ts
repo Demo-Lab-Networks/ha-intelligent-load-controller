@@ -179,6 +179,9 @@ describe("intelligent-load-controller-panel", () => {
       expect(panel.shadowRoot?.textContent).toContain("Today timeline");
       expect(panel.shadowRoot?.textContent).toContain("2 planned interval(s)");
       expect(panel.shadowRoot?.textContent).toContain("Hot water");
+      expect(panel.shadowRoot?.textContent).toContain("Heating now under controller supervision.");
+      expect(panel.shadowRoot?.textContent).toContain("Automatic on");
+      expect(panel.shadowRoot?.textContent).toContain("Review target");
       expect(panel.shadowRoot?.textContent).toContain("Running now");
       expect(panel.shadowRoot?.textContent).toContain("Starting soon");
     });
@@ -643,7 +646,7 @@ describe("intelligent-load-controller-panel", () => {
     await vi.waitFor(() => {
       expect(panel.shadowRoot?.querySelector(".load-card")).not.toBeNull();
     });
-    const openControls = Array.from(panel.shadowRoot?.querySelectorAll(".secondary-button") ?? []).find(
+    const openControls = Array.from(panel.shadowRoot?.querySelectorAll("button") ?? []).find(
       (button) => button.textContent?.trim() === "Open controls",
     ) as HTMLButtonElement;
     openControls.click();
