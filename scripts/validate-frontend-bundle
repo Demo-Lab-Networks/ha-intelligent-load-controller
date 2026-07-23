@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+"""Validate the committed Home Assistant frontend bundle before release."""
+
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+BUNDLE = ROOT / "custom_components/intelligent_load_controller/frontend/dist/intelligent-load-controller.js"
+EXPECTED_TAG = "intelligent-load-controller-panel"
+MIN_SIZE_BYTES = 10_000
+
+ERROR_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("bare process.env reference", re.compile(r"\bprocess\.env\b")),
+    ("CommonJS require call", re.compile(r"\brequire\s*\(")),
+    ("CommonJS module.exports reference", re.compile(r"\bmodule\.exports\b")),
+    ("Node __dirname reference", re.compile(r"\b__dirname\b")),
+    ("Node __filename reference", re.compile(r"\b__filename\b")),
+    (
+        "public CDN reference",
+        re.compile(r"https?://(?:[^/]+\.)?(?:unpkg\.com|jsdelivr\.net|cdnjs\.cloudflare\.com|esm\.sh|skypack\.dev)\b"),
+    ),
+    ("external HTTP module import", re.compile(r"\bimport\s*(?:\([^)]*|[^;]*from\s*)['\"]https?://")),
+)
+
+
+def snippet(source: str, start: int, end: int) -> str:
+    left = max(0, start - 80)
+    right = min(len(source), end + 80)
+    return source[left:right].replace("\n", "\\n")
+
+
+def main() -> int:
+    failures: list[str] = []
+
+    if not BUNDLE.exists() or BUNDLE.stat().st_size == 0:
+        failures.append(f"missing or empty bundle: {BUNDLE}")
+        print("\n".join(failures), file=sys.stderr)
+        return 1
+
+    size = BUNDLE.stat().st_size
+    if size < MIN_SIZE_BYTES:
+        failures.append(f"bundle is unexpectedly small: {size} bytes")
+
+    source = BUNDLE.read_text(encoding="utf-8")
+    if EXPECTED_TAG not in source:
+        failures.append(f"expected custom element tag is absent: {EXPECTED_TAG}")
+
+    for label, pattern in ERROR_PATTERNS:
+        match = pattern.search(source)
+        if match:
+            failures.append(f"{label}: {snippet(source, match.start(), match.end())}")
+
+    if failures:
+        print("Frontend bundle validation failed:", file=sys.stderr)
+        for failure in failures:
+            print(f"- {failure}", file=sys.stderr)
+        return 1
+
+    print(f"Frontend bundle validation passed: {BUNDLE} ({size} bytes)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

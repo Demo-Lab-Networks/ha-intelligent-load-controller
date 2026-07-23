@@ -1,5 +1,5 @@
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
-import { customElement, property, query, state } from "lit/decorators.js";
+import { property, query, state } from "lit/decorators.js";
 
 import {
   LoadControlApi,
@@ -31,9 +31,9 @@ import type {
   PanelRoute,
 } from "../types/home-assistant";
 import { formatCurrencyRate, formatDateTime, formatMeasurement } from "../utils/format";
-import "./ilc-site-snapshot-chart";
 
 type ViewState = "loading" | "reconnecting" | "error" | "no_sites" | "select_site" | "empty" | "ready";
+type ChartComponentState = "loading" | "ready" | "failed";
 type SiteChoice = SiteSummaryResponse & { entry_id: string };
 type WorkspaceView = "dashboard" | "plan" | "history" | "configure" | "load";
 type EditableConfig = Record<string, JsonValue>;
@@ -44,7 +44,6 @@ interface DeleteConfirmation {
   ifRevision: number;
 }
 
-@customElement("intelligent-load-controller-panel")
 export class IntelligentLoadControllerPanel extends LitElement {
   public static override styles = css`
     :host {
@@ -181,6 +180,11 @@ export class IntelligentLoadControllerPanel extends LitElement {
     .panel-card {
       margin-block: 1rem;
       padding: 1rem;
+    }
+
+    .chart-fallback {
+      display: grid;
+      gap: 1rem;
     }
 
     .metric {
@@ -561,6 +565,9 @@ export class IntelligentLoadControllerPanel extends LitElement {
   @state() private configurationPreview?: ConfigurationPreviewResponse;
   @state() private deleteConfirmation?: DeleteConfirmation;
   @state() private overrideDurationMinutes = 30;
+  @state() private chartComponentState: ChartComponentState = customElements.get("ilc-site-snapshot-chart")
+    ? "ready"
+    : "loading";
 
   @query(".dialog-card .danger-button") private deleteConfirmationButton?: HTMLButtonElement;
 
@@ -572,6 +579,7 @@ export class IntelligentLoadControllerPanel extends LitElement {
   private subscriptionRefreshPending = false;
   private updateUnsubscribe?: HomeAssistantUnsubscribe;
   private deleteDialogTrigger?: HTMLElement;
+  private chartComponentLoad?: Promise<void>;
   private readonly onNetworkChange = (): void => {
     if (this.isWebsocketConnected()) {
       void this.refresh();
@@ -583,6 +591,7 @@ export class IntelligentLoadControllerPanel extends LitElement {
 
   public override connectedCallback(): void {
     super.connectedCallback();
+    this.loadChartComponent();
     window.addEventListener("online", this.onNetworkChange);
     window.addEventListener("offline", this.onNetworkChange);
   }
@@ -909,7 +918,7 @@ export class IntelligentLoadControllerPanel extends LitElement {
             <p class="secondary">${translate(this.hass, "site.snapshotDescription")}</p>
           </div>
         </div>
-        <ilc-site-snapshot-chart .hass=${this.hass} .site=${dashboard.site}></ilc-site-snapshot-chart>
+        ${this.renderSnapshotChart(dashboard.site)}
       </section>
       <section aria-labelledby="loads-title">
         <div class="section-header">
@@ -928,6 +937,60 @@ export class IntelligentLoadControllerPanel extends LitElement {
         })}
       </p>
     `;
+  }
+
+  private renderSnapshotChart(site: SiteSummary) {
+    if (this.chartComponentState === "ready") {
+      return html`<ilc-site-snapshot-chart .hass=${this.hass} .site=${site}></ilc-site-snapshot-chart>`;
+    }
+
+    const message =
+      this.chartComponentState === "failed"
+        ? translate(this.hass, "site.snapshotChartUnavailable")
+        : translate(this.hass, "site.snapshotChartLoading");
+    return html`
+      <div class="chart-fallback" role="status" aria-live="polite">
+        <p class="secondary">${message}</p>
+        <div class="metric-grid" aria-label=${translate(this.hass, "site.metrics")}>
+          ${this.renderSnapshotMetric(translate(this.hass, "site.import"), formatMeasurement(this.hass, site.grid_import))}
+          ${this.renderSnapshotMetric(translate(this.hass, "site.export"), formatMeasurement(this.hass, site.grid_export))}
+          ${this.renderSnapshotMetric(
+            translate(this.hass, "site.solar"),
+            formatMeasurement(this.hass, site.solar_production),
+          )}
+          ${this.renderSnapshotMetric(
+            translate(this.hass, "site.controlled"),
+            formatMeasurement(this.hass, site.controlled_power),
+          )}
+        </div>
+      </div>
+    `;
+  }
+
+  private renderSnapshotMetric(label: string, value: string) {
+    return html`
+      <div class="panel-card metric">
+        <dl>
+          <dt>${label}</dt>
+          <dd>${value}</dd>
+        </dl>
+      </div>
+    `;
+  }
+
+  private loadChartComponent(): void {
+    if (this.chartComponentState === "ready" || this.chartComponentLoad) {
+      return;
+    }
+
+    this.chartComponentLoad = import("./ilc-site-snapshot-chart")
+      .then(() => {
+        this.chartComponentState = customElements.get("ilc-site-snapshot-chart") ? "ready" : "failed";
+      })
+      .catch((error: unknown) => {
+        console.warn("Load Control chart component failed to load; keeping textual fallback visible.", error);
+        this.chartComponentState = "failed";
+      });
   }
 
   private renderMetrics(site: SiteSummary) {
@@ -2424,4 +2487,8 @@ declare global {
   interface HTMLElementTagNameMap {
     "intelligent-load-controller-panel": IntelligentLoadControllerPanel;
   }
+}
+
+if (!customElements.get("intelligent-load-controller-panel")) {
+  customElements.define("intelligent-load-controller-panel", IntelligentLoadControllerPanel);
 }

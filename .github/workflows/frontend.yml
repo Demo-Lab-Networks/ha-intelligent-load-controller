@@ -30,5 +30,7 @@ jobs:
         run: npm --prefix frontend run test:e2e
       - name: Build committed panel artifact
         run: scripts/build-frontend
+      - name: Validate panel bundle for browser-only runtime
+        run: scripts/validate-frontend-bundle
       - name: Verify generated artifact is committed
         run: git diff --exit-code -- custom_components/intelligent_load_controller/frontend/dist

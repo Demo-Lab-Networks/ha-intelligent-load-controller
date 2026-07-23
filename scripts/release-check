@@ -39,6 +39,7 @@ fi
 "${SCRIPT_DIR}/validate-brand-assets"
 "${SCRIPT_DIR}/test"
 "${SCRIPT_DIR}/build-frontend"
+"${SCRIPT_DIR}/validate-frontend-bundle"
 
 if ! git -C "${ILC_ROOT_DIR}" diff --exit-code -- custom_components/intelligent_load_controller/frontend/dist; then
   printf 'Release check failed: rebuild changed the committed frontend artifact. Commit the reproducible build output.\n' >&2

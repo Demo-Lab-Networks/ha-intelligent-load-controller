@@ -8,6 +8,9 @@ const integrationDist = resolve(
 );
 
 export default defineConfig({
+  define: {
+    "process.env.NODE_ENV": JSON.stringify("production"),
+  },
   build: {
     target: "es2022",
     outDir: integrationDist,

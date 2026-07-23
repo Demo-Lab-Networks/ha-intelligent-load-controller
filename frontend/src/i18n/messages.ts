@@ -50,6 +50,8 @@ export const messages = {
     "site.health": "Site health",
     "site.snapshot": "Live site power snapshot",
     "site.snapshotDescription": "Current grid, solar, and controlled-load power.",
+    "site.snapshotChartLoading": "Preparing chart; textual site metrics remain available.",
+    "site.snapshotChartUnavailable": "Chart unavailable; textual site metrics remain available.",
     "site.metrics": "Current site metrics",
     "load.list": "Controlled loads",
     "load.state": "Controller state",

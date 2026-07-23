@@ -1,23 +1,13 @@
-import { BarChart } from "echarts/charts";
-import {
-  AriaComponent,
-  GridComponent,
-  TitleComponent,
-  TooltipComponent,
-} from "echarts/components";
-import * as echarts from "echarts/core";
-import { SVGRenderer } from "echarts/renderers";
 import type { ECharts } from "echarts/core";
 import { css, html, LitElement } from "lit";
-import { customElement, property, query } from "lit/decorators.js";
+import { property, query, state } from "lit/decorators.js";
 
 import type { SiteSummary } from "../models/dashboard";
 import type { HomeAssistant } from "../types/home-assistant";
 import { translate } from "../i18n";
 
-echarts.use([AriaComponent, BarChart, GridComponent, SVGRenderer, TitleComponent, TooltipComponent]);
+type EchartsCoreModule = typeof import("echarts/core");
 
-@customElement("ilc-site-snapshot-chart")
 export class IlcSiteSnapshotChart extends LitElement {
   public static override styles = css`
     :host {
@@ -34,16 +24,20 @@ export class IlcSiteSnapshotChart extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistant;
   @property({ attribute: false }) public site?: SiteSummary;
 
+  @state() private chartFailed = false;
+
   @query("#chart") private chartElement?: HTMLDivElement;
   private chart?: ECharts;
+  private chartLibrary?: EchartsCoreModule;
+  private chartLoad?: Promise<EchartsCoreModule>;
   private resizeObserver?: ResizeObserver;
 
   protected override firstUpdated(): void {
-    this.createChart();
+    void this.updateChart();
   }
 
   protected override updated(): void {
-    this.updateChart();
+    void this.updateChart();
   }
 
   public override disconnectedCallback(): void {
@@ -54,6 +48,14 @@ export class IlcSiteSnapshotChart extends LitElement {
   }
 
   protected override render() {
+    if (this.chartFailed) {
+      return html`
+        <p class="chart-fallback" role="status">
+          ${translate(this.hass, "site.snapshotChartUnavailable")}
+        </p>
+      `;
+    }
+
     return html`<div
       id="chart"
       role="img"
@@ -61,20 +63,26 @@ export class IlcSiteSnapshotChart extends LitElement {
     ></div>`;
   }
 
-  private createChart(): void {
+  private async createChart(): Promise<void> {
     if (!this.chartElement || this.chart) {
       return;
     }
 
-    this.chart = echarts.init(this.chartElement, undefined, { renderer: "svg" });
-    if (typeof ResizeObserver !== "undefined") {
-      this.resizeObserver = new ResizeObserver(() => this.chart?.resize());
-      this.resizeObserver.observe(this.chartElement);
+    try {
+      const echarts = await this.loadChartLibrary();
+      this.chart = echarts.init(this.chartElement, undefined, { renderer: "svg" });
+      if (typeof ResizeObserver !== "undefined") {
+        this.resizeObserver = new ResizeObserver(() => this.chart?.resize());
+        this.resizeObserver.observe(this.chartElement);
+      }
+    } catch (error: unknown) {
+      console.warn("Load Control site snapshot chart failed; keeping textual dashboard metrics visible.", error);
+      this.chartFailed = true;
     }
   }
 
-  private updateChart(): void {
-    this.createChart();
+  private async updateChart(): Promise<void> {
+    await this.createChart();
     if (!this.chart || !this.site) {
       return;
     }
@@ -122,10 +130,40 @@ export class IlcSiteSnapshotChart extends LitElement {
       ],
     });
   }
+
+  private async loadChartLibrary(): Promise<EchartsCoreModule> {
+    if (this.chartLibrary) {
+      return this.chartLibrary;
+    }
+    if (!this.chartLoad) {
+      this.chartLoad = Promise.all([
+        import("echarts/core"),
+        import("echarts/charts"),
+        import("echarts/components"),
+        import("echarts/renderers"),
+      ]).then(([echarts, charts, components, renderers]) => {
+        echarts.use([
+          components.AriaComponent,
+          charts.BarChart,
+          components.GridComponent,
+          renderers.SVGRenderer,
+          components.TitleComponent,
+          components.TooltipComponent,
+        ]);
+        this.chartLibrary = echarts;
+        return echarts;
+      });
+    }
+    return this.chartLoad;
+  }
 }
 
 declare global {
   interface HTMLElementTagNameMap {
     "ilc-site-snapshot-chart": IlcSiteSnapshotChart;
   }
+}
+
+if (!customElements.get("ilc-site-snapshot-chart")) {
+  customElements.define("ilc-site-snapshot-chart", IlcSiteSnapshotChart);
 }
