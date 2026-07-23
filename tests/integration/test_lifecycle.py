@@ -30,10 +30,16 @@ from custom_components.intelligent_load_controller import (
 from custom_components.intelligent_load_controller.const import (
     DATA_RUNTIME,
     DOMAIN,
+    PANEL_ICON,
+    PANEL_MODULE_URL,
+    PANEL_TAG,
+    PANEL_TITLE,
+    PANEL_URL_PATH,
     SERVICE_REPLAN,
 )
 from custom_components.intelligent_load_controller.coordinator import SiteCoordinator
 from custom_components.intelligent_load_controller.entity import LoadControlEntity
+from custom_components.intelligent_load_controller.panel import async_register_panel
 from custom_components.intelligent_load_controller.storage import RuntimeStore
 
 pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
@@ -213,3 +219,36 @@ async def test_load_entities_are_registered_against_their_config_subentry(
             for entities, subentry_id in calls
             if subentry_id is None
         )
+
+
+async def test_panel_registers_as_a_custom_panel_with_local_bundle(hass) -> None:
+    """Register the sidebar item through HA's custom-panel contract."""
+
+    hass.data[DOMAIN] = {"runtimes": {"site-1": object()}}
+    register_static_paths = AsyncMock()
+    register_panel = MagicMock()
+    hass.http.async_register_static_paths = register_static_paths
+
+    with patch(
+        "custom_components.intelligent_load_controller.panel.frontend.async_register_built_in_panel",
+        new=register_panel,
+    ):
+        await async_register_panel(hass)
+
+    register_static_paths.assert_awaited_once()
+    register_panel.assert_called_once_with(
+        hass,
+        component_name="custom",
+        sidebar_title=PANEL_TITLE,
+        sidebar_icon=PANEL_ICON,
+        frontend_url_path=PANEL_URL_PATH,
+        config={
+            "_panel_custom": {
+                "name": PANEL_TAG,
+                "module_url": PANEL_MODULE_URL,
+                "embed_iframe": False,
+                "trust_external": False,
+            }
+        },
+        require_admin=False,
+    )

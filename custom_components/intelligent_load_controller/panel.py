@@ -36,7 +36,7 @@ async def async_register_panel(hass: HomeAssistant) -> None:
         return
     frontend.async_register_built_in_panel(
         hass,
-        component_name=DOMAIN,
+        component_name="custom",
         sidebar_title=PANEL_TITLE,
         sidebar_icon=PANEL_ICON,
         frontend_url_path=PANEL_URL_PATH,
