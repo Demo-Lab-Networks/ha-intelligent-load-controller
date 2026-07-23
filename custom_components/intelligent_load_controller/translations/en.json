@@ -38,29 +38,31 @@
   },
   "config_subentries": {
     "load": {
-      "title": "Load",
-      "flow": {
-        "step": {
-          "user": {
-            "title": "Add load",
-            "data": {
-              "display_name": "Name",
-              "load_type": "Load type",
-              "expected_power_w": "Expected power (W)"
-            }
-          },
-          "reconfigure": {
-            "title": "Reconfigure load",
-            "data": {
-              "display_name": "Name",
-              "load_type": "Load type",
-              "expected_power_w": "Expected power (W)"
-            }
+      "entry_type": "Load",
+      "initiate_flow": {
+        "user": "Add load",
+        "reconfigure": "Reconfigure load"
+      },
+      "step": {
+        "user": {
+          "title": "Add load",
+          "data": {
+            "display_name": "Name",
+            "load_type": "Load type",
+            "expected_power_w": "Expected power (W)"
           }
         },
-        "abort": {
-          "reconfigure_successful": "Load reconfigured."
+        "reconfigure": {
+          "title": "Reconfigure load",
+          "data": {
+            "display_name": "Name",
+            "load_type": "Load type",
+            "expected_power_w": "Expected power (W)"
+          }
         }
+      },
+      "abort": {
+        "reconfigure_successful": "Load reconfigured."
       }
     }
   },
