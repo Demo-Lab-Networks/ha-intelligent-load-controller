@@ -25,6 +25,7 @@ ERROR_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
     ("external HTTP module import", re.compile(r"\bimport\s*(?:\([^)]*|[^;]*from\s*)['\"]https?://")),
 )
+NODE_GLOBALS: tuple[str, ...] = ("Buffer", "global")
 
 
 def snippet(source: str, start: int, end: int) -> str:
@@ -35,6 +36,7 @@ def snippet(source: str, start: int, end: int) -> str:
 
 def main() -> int:
     failures: list[str] = []
+    notices: list[str] = []
 
     if not BUNDLE.exists() or BUNDLE.stat().st_size == 0:
         failures.append(f"missing or empty bundle: {BUNDLE}")
@@ -54,14 +56,40 @@ def main() -> int:
         if match:
             failures.append(f"{label}: {snippet(source, match.start(), match.end())}")
 
+    for name in NODE_GLOBALS:
+        for match in re.finditer(rf"\b{name}\b", source):
+            if is_allowed_node_global_reference(source, name, match.start(), match.end()):
+                notices.append(
+                    f"allowed guarded/non-global {name} reference: {snippet(source, match.start(), match.end())}"
+                )
+                continue
+            failures.append(f"Node-only global {name} reference: {snippet(source, match.start(), match.end())}")
+            break
+
     if failures:
         print("Frontend bundle validation failed:", file=sys.stderr)
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
 
+    for notice in notices[:4]:
+        print(f"Frontend bundle validation notice: {notice}")
     print(f"Frontend bundle validation passed: {BUNDLE} ({size} bytes)")
     return 0
+
+
+def is_allowed_node_global_reference(source: str, name: str, start: int, end: int) -> bool:
+    """Return true for browser-safe feature checks or non-global property keys."""
+
+    before = source[max(0, start - 140) : start]
+    after = source[end : min(len(source), end + 20)]
+    if start > 0 and end < len(source) and source[start - 1] in {"'", '"', "`"} and source[end] == source[start - 1]:
+        return True
+    if name == "Buffer":
+        return before.endswith("typeof ") or "typeof Buffer < \"u\" && typeof Buffer.from" in before
+    if name == "global":
+        return before.endswith(".") or after.lstrip().startswith(":")
+    return False
 
 
 if __name__ == "__main__":

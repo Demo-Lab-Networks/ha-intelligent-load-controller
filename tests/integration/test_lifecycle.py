@@ -32,7 +32,9 @@ from custom_components.intelligent_load_controller.const import (
     DATA_RUNTIME,
     DOMAIN,
     PANEL_ICON,
+    PANEL_MODULE_CACHE_VERSION,
     PANEL_MODULE_URL,
+    PANEL_STATIC_PATH,
     PANEL_TAG,
     PANEL_TITLE,
     PANEL_URL_PATH,
@@ -242,6 +244,13 @@ async def test_panel_registers_as_a_custom_panel_with_local_bundle(hass, monkeyp
         await async_register_panel(hass)
 
     register_static_paths.assert_awaited_once()
+    static_paths = register_static_paths.await_args.args[0]
+    assert len(static_paths) == 1
+    static_path = static_paths[0]
+    assert static_path.url_path == PANEL_STATIC_PATH
+    assert static_path.cache_headers is False
+    assert static_path.path.endswith("custom_components/intelligent_load_controller/frontend/dist")
+    assert PANEL_MODULE_URL.endswith(f"?v={PANEL_MODULE_CACHE_VERSION}")
     register_panel.assert_called_once_with(
         hass,
         component_name="custom",
