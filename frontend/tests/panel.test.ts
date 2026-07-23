@@ -80,10 +80,12 @@ describe("intelligent-load-controller-panel", () => {
   });
 
   it("renders the redesigned overview hierarchy from backend summary fields", async () => {
+    const calls: Record<string, unknown>[] = [];
     const panel = document.createElement(
       "intelligent-load-controller-panel",
     ) as IntelligentLoadControllerPanel;
     panel.hass = createHass((message) => {
+      calls.push(message);
       switch (message["type"]) {
         case "intelligent_load_controller/v1/site_list":
           return { sites: [{ entry_id: "entry-home", site_id: "home", name: "Home" }] };
@@ -138,6 +140,28 @@ describe("intelligent-load-controller-panel", () => {
               },
             ],
           };
+        case "intelligent_load_controller/v1/daily_timeline":
+          return {
+            generated_at: "2026-07-23T00:00:00Z",
+            intervals: [
+              {
+                load_id: "hot-water",
+                start_at: "2026-07-23T00:00:00Z",
+                end_at: "2026-07-23T01:00:00Z",
+                power_w: 2400,
+                reason_code: "solar_export_qualified",
+              },
+              {
+                load_id: "pool",
+                start_at: "2026-07-23T03:00:00Z",
+                end_at: "2026-07-23T04:00:00Z",
+                power_w: 800,
+                reason_code: "free_period_run",
+              },
+            ],
+          };
+        case "intelligent_load_controller/v1/current_plan":
+          return null;
         default:
           return {};
       }
@@ -152,8 +176,23 @@ describe("intelligent-load-controller-panel", () => {
       expect(panel.shadowRoot?.textContent).toContain("Attention and opportunities");
       expect(panel.shadowRoot?.textContent).toContain("EV charger target at risk");
       expect(panel.shadowRoot?.textContent).toContain("Today summary");
+      expect(panel.shadowRoot?.textContent).toContain("Today timeline");
+      expect(panel.shadowRoot?.textContent).toContain("2 planned interval(s)");
+      expect(panel.shadowRoot?.textContent).toContain("Hot water");
       expect(panel.shadowRoot?.textContent).toContain("Running now");
       expect(panel.shadowRoot?.textContent).toContain("Starting soon");
+    });
+
+    const openPlan = Array.from(panel.shadowRoot?.querySelectorAll("button") ?? []).find(
+      (button) => button.textContent?.trim() === "Open Plan",
+    ) as HTMLButtonElement;
+    openPlan.click();
+    await vi.waitFor(() => {
+      expect(window.location.pathname).toBe("/intelligent-load-controller/plan");
+      expect(calls).toContainEqual({
+        type: "intelligent_load_controller/v1/current_plan",
+        entry_id: "entry-home",
+      });
     });
   });
 
@@ -409,7 +448,7 @@ describe("intelligent-load-controller-panel", () => {
     });
   });
 
-  it("loads plan, timeline, insights, and events only when their views are opened", async () => {
+  it("loads plan details, insights, and events only when their views are opened", async () => {
     const calls: Record<string, unknown>[] = [];
     const panel = document.createElement(
       "intelligent-load-controller-panel",
@@ -425,11 +464,22 @@ describe("intelligent-load-controller-panel", () => {
             site_id: "home",
             name: "Home",
             state: "idle",
-            active_loads: 0,
+            active_loads: 1,
             waiting_loads: 0,
           };
         case "intelligent_load_controller/v1/load_list":
-          return { loads: [] };
+          return {
+            loads: [
+              {
+                load_id: "hot-water",
+                name: "Hot water",
+                type: "hot_water",
+                state: "idle",
+                reason_code: "lowest_cost_window",
+                automatic_control: true,
+              },
+            ],
+          };
         case "intelligent_load_controller/v1/current_plan":
           return null;
         case "intelligent_load_controller/v1/daily_timeline":
@@ -453,7 +503,16 @@ describe("intelligent-load-controller-panel", () => {
     });
     document.body.append(panel);
 
-    await waitForRender();
+    await vi.waitFor(() => {
+      expect(calls).toContainEqual({
+        type: "intelligent_load_controller/v1/daily_timeline",
+        entry_id: "entry-home",
+      });
+      expect(calls).not.toContainEqual({
+        type: "intelligent_load_controller/v1/current_plan",
+        entry_id: "entry-home",
+      });
+    });
     const buttonWithText = (text: string): HTMLButtonElement =>
       Array.from(panel.shadowRoot?.querySelectorAll(".nav-button") ?? []).find(
         (button) => button.textContent?.trim().endsWith(text),

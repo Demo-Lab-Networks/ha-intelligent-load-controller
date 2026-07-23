@@ -147,6 +147,16 @@ export const panelStyles = [ilcDesignTokens, css`
       padding: 1rem;
     }
 
+    .sr-only {
+      block-size: 1px;
+      clip: rect(0 0 0 0);
+      clip-path: inset(50%);
+      inline-size: 1px;
+      overflow: hidden;
+      position: absolute;
+      white-space: nowrap;
+    }
+
     .home-status-hero {
       background:
         linear-gradient(
@@ -326,6 +336,112 @@ export const panelStyles = [ilcDesignTokens, css`
     .kpi-card {
       background: var(--card-background-color);
       min-block-size: 6rem;
+    }
+
+    .today-timeline-card {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .timeline-summary {
+      max-inline-size: 70rem;
+    }
+
+    .timeline-placeholder {
+      background: color-mix(in srgb, var(--secondary-background-color) 72%, transparent);
+      border: 1px dashed var(--divider-color);
+      border-radius: var(--ilc-radius-md, var(--ha-card-border-radius, 0.75rem));
+      color: var(--secondary-text-color);
+      padding: 1rem;
+    }
+
+    .timeline-strip {
+      background:
+        linear-gradient(90deg, color-mix(in srgb, var(--divider-color) 50%, transparent) 1px, transparent 1px),
+        color-mix(in srgb, var(--secondary-background-color) 72%, transparent);
+      background-size: 25% 100%;
+      border: 1px solid var(--divider-color);
+      border-radius: var(--ilc-radius-pill);
+      min-block-size: 3rem;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .timeline-segment {
+      background: var(--ilc-energy-controlled);
+      block-size: 1.25rem;
+      border: 0;
+      border-radius: var(--ilc-radius-pill);
+      cursor: pointer;
+      inset-block-start: 50%;
+      min-inline-size: 0.75rem;
+      opacity: 0.9;
+      padding: 0;
+      position: absolute;
+      transform: translateY(-50%);
+    }
+
+    .timeline-segment:hover,
+    .timeline-segment:focus-visible {
+      opacity: 1;
+      transform: translateY(-50%) scaleY(1.18);
+    }
+
+    .timeline-segment[data-tone="solar"],
+    .timeline-dot[data-tone="solar"] {
+      background: var(--ilc-energy-solar);
+    }
+
+    .timeline-segment[data-tone="free"],
+    .timeline-dot[data-tone="free"] {
+      background: var(--ilc-energy-grid-export);
+    }
+
+    .timeline-segment[data-tone="manual"],
+    .timeline-dot[data-tone="manual"] {
+      background: var(--ilc-status-warning);
+    }
+
+    .timeline-segment[data-tone="catch_up"],
+    .timeline-dot[data-tone="catch_up"] {
+      background: var(--ilc-status-danger);
+    }
+
+    .timeline-now {
+      background: var(--primary-text-color);
+      block-size: 100%;
+      inline-size: 0.15rem;
+      inset-block-start: 0;
+      position: absolute;
+      z-index: 2;
+    }
+
+    .timeline-detail-list {
+      display: grid;
+      gap: 0.65rem;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .timeline-detail-list li {
+      align-items: start;
+      display: grid;
+      gap: 0.65rem;
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .timeline-detail-list strong,
+    .timeline-detail-list span {
+      display: block;
+    }
+
+    .timeline-dot {
+      background: var(--ilc-energy-controlled);
+      block-size: 0.8rem;
+      border-radius: 50%;
+      inline-size: 0.8rem;
+      margin-block-start: 0.25rem;
     }
 
     .overview-load-group {

@@ -13,6 +13,7 @@ All notable changes will be documented here. The project intends to follow [Keep
 - Route-level page modules for Overview, Loads, load detail, Plan, Insights, Settings, and Diagnostics, plus shared load summary and plan table/proposal components.
 - UX redesign Phase 2 Overview starter slice: Home Status hero, live energy-flow summary, attention list, focused Today KPIs, grouped active/upcoming loads, and deterministic overview presentation helpers.
 - Optional V1 `site_summary.attention[]` backend presentation field for backend-ranked warning and manual-override attention items.
+- Compressed Overview Today timeline component backed by the existing read-only `daily_timeline` WebSocket command.
 
 ### Changed
 
@@ -21,6 +22,7 @@ All notable changes will be documented here. The project intends to follow [Keep
 - Reduced the root panel component by moving presentational page rendering, including Settings and load-detail controls, into dedicated modules.
 - Replaced the Overview equal-weight metric wall with a stronger everyday-operation hierarchy and more contextual load summary cards.
 - Overview attention now prefers backend-owned rank/severity/action data when available while preserving typed-field fallback behaviour for older summaries.
+- Plan route data loading now distinguishes the full current plan from the lightweight Overview timeline preload.
 
 ### Fixed
 

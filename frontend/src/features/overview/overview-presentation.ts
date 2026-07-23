@@ -1,4 +1,5 @@
 import type { MessageKey } from "../../i18n/messages";
+import type { PlanIntervalResponse } from "../../api/load-control-api";
 import type {
   DashboardData,
   LoadSummary,
@@ -12,6 +13,7 @@ export type OverviewStatusTone = "neutral" | "info" | "success" | "warning" | "d
 export type AttentionSeverity = "critical" | "warning" | "info";
 export type AttentionAction = "load_detail" | "settings" | "diagnostics";
 export type OverviewLoadGroupKey = "attention" | "running" | "upcoming" | "waiting" | "complete";
+export type TimelineSegmentTone = "planned" | "solar" | "free" | "manual" | "catch_up";
 
 export interface TargetSummary {
   total: number;
@@ -49,6 +51,28 @@ export interface OverviewLoadGroup {
   key: OverviewLoadGroupKey;
   titleKey: MessageKey;
   loads: readonly LoadSummary[];
+}
+
+export interface TodayTimelineSegment {
+  id: string;
+  loadId?: string;
+  loadName: string;
+  startAt: string;
+  endAt: string;
+  startPercent: number;
+  widthPercent: number;
+  powerW?: number;
+  reasonCode?: string;
+  tone: TimelineSegmentTone;
+}
+
+export interface TodayTimelinePresentation {
+  segments: readonly TodayTimelineSegment[];
+  loadCount: number;
+  windowStartAt?: string;
+  windowEndAt?: string;
+  currentPercent?: number;
+  nextSegment?: TodayTimelineSegment;
 }
 
 export interface OverviewPresentation {
@@ -378,6 +402,105 @@ export function groupOverviewLoads(loads: readonly LoadSummary[]): readonly Over
 
 export function isLoadRunning(load: LoadSummary): boolean {
   return RUNNING_STATES.has(load.controller_state) || (load.current_power?.value ?? 0) > 0;
+}
+
+export function createTodayTimelinePresentation(
+  intervals: readonly PlanIntervalResponse[] | undefined,
+  loads: readonly LoadSummary[],
+  now: Date = new Date(),
+): TodayTimelinePresentation {
+  const loadNames = new Map(loads.map((load) => [load.load_id, load.name]));
+  const parsed = (intervals ?? [])
+    .map((interval, index) => {
+      const start = Date.parse(interval.start_at ?? "");
+      const end = Date.parse(interval.end_at ?? "");
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+        return undefined;
+      }
+      return { interval, index, start, end };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== undefined)
+    .sort((left, right) => left.start - right.start || left.end - right.end);
+
+  if (parsed.length === 0) {
+    return {
+      segments: [],
+      loadCount: 0,
+    };
+  }
+
+  const first = parsed[0];
+  if (!first) {
+    return {
+      segments: [],
+      loadCount: 0,
+    };
+  }
+
+  const windowStart = first.start;
+  const windowEnd = Math.max(...parsed.map((item) => item.end));
+  const windowDuration = Math.max(1, windowEnd - windowStart);
+  const loadIds = new Set<string>();
+  const segments = parsed.map(({ interval, index, start, end }) => {
+    const loadId = interval.load_id;
+    if (loadId) {
+      loadIds.add(loadId);
+    }
+    const startPercent = clampPercent(((start - windowStart) / windowDuration) * 100);
+    const widthPercent = Math.max(1.5, clampPercent(((end - start) / windowDuration) * 100));
+    return {
+      id: `${interval.load_id ?? "site"}:${interval.start_at}:${interval.end_at}:${index}`,
+      loadId,
+      loadName: loadId ? loadNames.get(loadId) ?? loadId : "Site",
+      startAt: interval.start_at ?? new Date(start).toISOString(),
+      endAt: interval.end_at ?? new Date(end).toISOString(),
+      startPercent,
+      widthPercent: Math.min(widthPercent, 100 - startPercent),
+      powerW: interval.power_w,
+      reasonCode: interval.reason_code,
+      tone: toneForTimelineReason(interval.reason_code),
+    };
+  });
+  const nowMs = now.getTime();
+  const currentPercent =
+    Number.isFinite(nowMs) && nowMs >= windowStart && nowMs <= windowEnd
+      ? clampPercent(((nowMs - windowStart) / windowDuration) * 100)
+      : undefined;
+  const nextSegment = Number.isFinite(nowMs)
+    ? segments.find((segment) => Date.parse(segment.endAt) >= nowMs)
+    : segments[0];
+
+  return {
+    segments,
+    loadCount: loadIds.size,
+    windowStartAt: new Date(windowStart).toISOString(),
+    windowEndAt: new Date(windowEnd).toISOString(),
+    currentPercent,
+    nextSegment,
+  };
+}
+
+function clampPercent(value: number): number {
+  return Math.min(100, Math.max(0, value));
+}
+
+function toneForTimelineReason(reasonCode: string | undefined): TimelineSegmentTone {
+  if (!reasonCode) {
+    return "planned";
+  }
+  if (reasonCode.includes("manual")) {
+    return "manual";
+  }
+  if (reasonCode.includes("solar")) {
+    return "solar";
+  }
+  if (reasonCode.includes("free")) {
+    return "free";
+  }
+  if (reasonCode.includes("deadline") || reasonCode.includes("catchup")) {
+    return "catch_up";
+  }
+  return "planned";
 }
 
 export function loadNeedsAttention(load: LoadSummary): boolean {

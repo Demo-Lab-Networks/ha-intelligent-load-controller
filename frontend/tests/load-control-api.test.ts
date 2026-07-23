@@ -145,6 +145,25 @@ describe("LoadControlApi", () => {
         if (message["type"] === "intelligent_load_controller/v1/current_plan") {
           return null;
         }
+        if (message["type"] === "intelligent_load_controller/v1/daily_timeline") {
+          return {
+            generated_at: "2026-07-23T00:00:00Z",
+            intervals: [
+              {
+                load_id: "hws",
+                start_at: "2026-07-23T01:00:00Z",
+                end_at: "2026-07-23T02:00:00Z",
+                power_w: 2400,
+                reason_code: "solar_export_qualified",
+              },
+              {
+                load_id: "ignored",
+                start_at: "2026-07-23T01:00:00Z",
+                power_w: "not-a-number",
+              },
+            ],
+          };
+        }
         return {};
       }),
     );
@@ -157,6 +176,18 @@ describe("LoadControlApi", () => {
     await api.setAutomaticControl("entry-home", "load-1", false, 8);
     await api.getDiagnostics("entry-home");
     await expect(api.getCurrentPlan("entry-home")).resolves.toBeNull();
+    await expect(api.getDailyTimeline("entry-home")).resolves.toEqual({
+      generated_at: "2026-07-23T00:00:00Z",
+      intervals: [
+        {
+          load_id: "hws",
+          start_at: "2026-07-23T01:00:00Z",
+          end_at: "2026-07-23T02:00:00Z",
+          power_w: 2400,
+          reason_code: "solar_export_qualified",
+        },
+      ],
+    });
 
     expect(calls).toEqual(
       expect.arrayContaining([
@@ -205,6 +236,10 @@ describe("LoadControlApi", () => {
         },
         {
           type: "intelligent_load_controller/v1/current_plan",
+          entry_id: "entry-home",
+        },
+        {
+          type: "intelligent_load_controller/v1/daily_timeline",
           entry_id: "entry-home",
         },
       ]),

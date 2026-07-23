@@ -411,8 +411,9 @@ export class LoadControlApi {
     return this.request("current_plan", { entry_id: entryId });
   }
 
-  public getDailyTimeline(entryId: string): Promise<DailyTimelineResponse> {
-    return this.request("daily_timeline", { entry_id: entryId });
+  public async getDailyTimeline(entryId: string): Promise<DailyTimelineResponse> {
+    const response = await this.request("daily_timeline", { entry_id: entryId });
+    return normalizeDailyTimeline(response);
   }
 
   public getHistoricalSummary(entryId: string): Promise<HistoricalSummaryResponse> {
@@ -503,6 +504,53 @@ function normalizeLoadSummary(response: LoadListItemResponse): LoadSummary {
     target_status: response.target_status,
     fault: response.fault ?? state === "fault",
   };
+}
+
+function normalizeDailyTimeline(response: DailyTimelineResponse): DailyTimelineResponse {
+  return {
+    generated_at: typeof response.generated_at === "string" ? response.generated_at : null,
+    intervals: normalizePlanIntervals(response.intervals),
+  };
+}
+
+function normalizePlanIntervals(value: readonly PlanIntervalResponse[] | undefined): readonly PlanIntervalResponse[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const intervals: PlanIntervalResponse[] = [];
+  for (const raw of value) {
+    if (typeof raw !== "object" || raw === null) {
+      continue;
+    }
+    const candidate = raw as Record<string, unknown>;
+    const startAt = candidate["start_at"];
+    const endAt = candidate["end_at"];
+    if (typeof startAt !== "string" || typeof endAt !== "string") {
+      continue;
+    }
+    const loadId = candidate["load_id"];
+    const powerW = candidate["power_w"];
+    const solarAllocatedW = candidate["solar_allocated_w"];
+    const expectedCost = candidate["expected_cost"];
+    const reasonCode = candidate["reason_code"];
+    intervals.push({
+      start_at: startAt,
+      end_at: endAt,
+      ...(typeof loadId === "string" ? { load_id: loadId } : {}),
+      ...(isFiniteNumber(powerW) ? { power_w: powerW } : {}),
+      ...(isFiniteNumber(solarAllocatedW) ? { solar_allocated_w: solarAllocatedW } : {}),
+      ...(typeof expectedCost === "string" ? { expected_cost: expectedCost } : {}),
+      ...(typeof reasonCode === "string" ? { reason_code: reasonCode } : {}),
+    });
+  }
+  return intervals.sort((left, right) => {
+    const leftStart = Date.parse(left.start_at ?? "");
+    const rightStart = Date.parse(right.start_at ?? "");
+    if (Number.isNaN(leftStart) || Number.isNaN(rightStart)) {
+      return String(left.start_at).localeCompare(String(right.start_at));
+    }
+    return leftStart - rightStart;
+  });
 }
 
 function measurementFromWatts(value: number | undefined): Measurement | undefined {

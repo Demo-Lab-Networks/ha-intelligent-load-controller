@@ -7,6 +7,8 @@ import "../components/loads/ilc-load-summary-card";
 import "../components/overview/ilc-attention-list";
 import "../components/overview/ilc-home-status-hero";
 import "../components/overview/ilc-today-kpis";
+import "../components/overview/ilc-today-timeline";
+import type { DailyTimelineResponse } from "../api/load-control-api";
 import { createOverviewPresentation } from "../features/overview/overview-presentation";
 import { translate } from "../i18n";
 import type { DashboardData, SiteSummary } from "../models/dashboard";
@@ -18,7 +20,10 @@ export type IlcChartComponentState = "loading" | "ready" | "failed";
 export class IlcOverviewPage extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistant;
   @property({ attribute: false }) public dashboard?: DashboardData;
+  @property({ attribute: false }) public timeline?: DailyTimelineResponse;
   @property() public chartComponentState: IlcChartComponentState = "loading";
+  @property({ type: Boolean }) public timelineLoading = false;
+  @property({ type: Boolean }) public timelineUnavailable = false;
 
   protected override createRenderRoot(): HTMLElement | DocumentFragment {
     return this;
@@ -44,6 +49,15 @@ export class IlcOverviewPage extends LitElement {
         @ilc-open-load=${this.redispatchLoadEvent}
       ></ilc-attention-list>
       <ilc-today-kpis .hass=${this.hass} .site=${dashboard.site} .loads=${dashboard.loads}></ilc-today-kpis>
+      <ilc-today-timeline
+        .hass=${this.hass}
+        .loads=${dashboard.loads}
+        .timeline=${this.timeline}
+        .loading=${this.timelineLoading}
+        .unavailable=${this.timelineUnavailable}
+        @ilc-open-load=${this.redispatchLoadEvent}
+        @ilc-navigate=${this.redispatchNavigationEvent}
+      ></ilc-today-timeline>
       <section class="panel-card" aria-labelledby="snapshot-title">
         <div class="section-header">
           <div>
@@ -154,6 +168,17 @@ export class IlcOverviewPage extends LitElement {
     event.stopPropagation();
     this.dispatchEvent(
       new CustomEvent("ilc-edit-load", {
+        bubbles: true,
+        composed: true,
+        detail: event.detail,
+      }),
+    );
+  };
+
+  private readonly redispatchNavigationEvent = (event: CustomEvent<{ view: string }>): void => {
+    event.stopPropagation();
+    this.dispatchEvent(
+      new CustomEvent("ilc-navigate", {
         bubbles: true,
         composed: true,
         detail: event.detail,

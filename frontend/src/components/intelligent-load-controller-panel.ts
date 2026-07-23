@@ -81,6 +81,8 @@ export class IntelligentLoadControllerPanel extends LitElement {
   @state() private editingLoadId?: string;
   @state() private currentPlan?: CurrentPlanResponse | null;
   @state() private dailyTimeline?: DailyTimelineResponse;
+  @state() private overviewTimelineLoading = false;
+  @state() private overviewTimelineUnavailable = false;
   @state() private history?: HistoricalSummaryResponse;
   @state() private events?: readonly EventJournalEntry[];
   @state() private loadDetail?: JsonObject;
@@ -229,6 +231,12 @@ export class IntelligentLoadControllerPanel extends LitElement {
       this.viewState = dashboard.loads.length === 0 ? "empty" : "ready";
       this.hasLoaded = true;
       void this.ensureUpdateSubscription(entryId);
+      if (dashboard.loads.length === 0) {
+        this.dailyTimeline = undefined;
+        this.overviewTimelineUnavailable = false;
+      } else if (this.workspaceView === "dashboard") {
+        void this.ensureOverviewTimeline(entryId);
+      }
       if (this.workspaceView !== "dashboard") {
         void this.ensureWorkspaceData(this.workspaceView);
       }
@@ -299,6 +307,9 @@ export class IntelligentLoadControllerPanel extends LitElement {
             <ilc-overview-page
               .hass=${this.hass}
               .dashboard=${dashboard}
+              .timeline=${this.dailyTimeline}
+              .timelineLoading=${this.overviewTimelineLoading}
+              .timelineUnavailable=${this.overviewTimelineUnavailable}
               .chartComponentState=${this.chartComponentState}
               @ilc-open-load=${this.handleOpenLoad}
               @ilc-edit-load=${this.handleEditLoad}
@@ -685,6 +696,7 @@ export class IntelligentLoadControllerPanel extends LitElement {
         ]);
         this.currentPlan = plan;
         this.dailyTimeline = timeline;
+        this.overviewTimelineUnavailable = false;
       } else if (view === "history") {
         const [history, eventJournal] = await Promise.all([
           api.getHistoricalSummary(entryId),
@@ -706,6 +718,37 @@ export class IntelligentLoadControllerPanel extends LitElement {
     }
   }
 
+  private async ensureOverviewTimeline(entryId: string, force = false): Promise<void> {
+    const hass = this.hass;
+    if (!hass || !this.isWebsocketConnected()) {
+      return;
+    }
+    if (!force && this.dailyTimeline !== undefined) {
+      return;
+    }
+    if (this.overviewTimelineLoading) {
+      return;
+    }
+
+    this.overviewTimelineLoading = true;
+    this.overviewTimelineUnavailable = false;
+    try {
+      const timeline = await new LoadControlApi(hass).getDailyTimeline(entryId);
+      if (entryId !== this.selectedEntryId) {
+        return;
+      }
+      this.dailyTimeline = timeline;
+    } catch {
+      if (entryId === this.selectedEntryId) {
+        this.overviewTimelineUnavailable = true;
+      }
+    } finally {
+      if (entryId === this.selectedEntryId) {
+        this.overviewTimelineLoading = false;
+      }
+    }
+  }
+
   private hasWorkspaceData(view: WorkspaceView): boolean {
     switch (view) {
       case "dashboard":
@@ -713,7 +756,7 @@ export class IntelligentLoadControllerPanel extends LitElement {
       case "configure":
         return this.configuration !== undefined;
       case "plan":
-        return this.currentPlan !== undefined || this.dailyTimeline !== undefined;
+        return this.currentPlan !== undefined && this.dailyTimeline !== undefined;
       case "history":
         return this.history !== undefined || this.events !== undefined;
       case "diagnostics":
@@ -1068,6 +1111,8 @@ export class IntelligentLoadControllerPanel extends LitElement {
     this.editingLoadId = undefined;
     this.currentPlan = undefined;
     this.dailyTimeline = undefined;
+    this.overviewTimelineLoading = false;
+    this.overviewTimelineUnavailable = false;
     this.history = undefined;
     this.events = undefined;
     this.loadDetail = undefined;

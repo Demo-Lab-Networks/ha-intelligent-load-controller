@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   classifySiteFlow,
+  createTodayTimelinePresentation,
   createOverviewPresentation,
   groupOverviewLoads,
   summariseTargets,
@@ -202,6 +203,48 @@ describe("overview presentation", () => {
       titleKey: "overview.attention.targetAtRisk",
       affectedLoadId: "ev",
       action: "load_detail",
+    });
+  });
+
+  it("creates a compressed today timeline from backend intervals without inventing decisions", () => {
+    const timeline = createTodayTimelinePresentation(
+      [
+        {
+          load_id: "pool",
+          start_at: "2026-07-23T02:00:00Z",
+          end_at: "2026-07-23T03:00:00Z",
+          power_w: 900,
+          reason_code: "free_period_run",
+        },
+        {
+          load_id: "hws",
+          start_at: "2026-07-23T00:00:00Z",
+          end_at: "2026-07-23T01:00:00Z",
+          power_w: 2400,
+          reason_code: "solar_export_qualified",
+        },
+        {
+          load_id: "ignored",
+          start_at: "bad",
+          end_at: "2026-07-23T01:00:00Z",
+        },
+      ],
+      [
+        load({ load_id: "hws", name: "Hot water" }),
+        load({ load_id: "pool", name: "Pool pump" }),
+      ],
+      new Date("2026-07-23T00:30:00Z"),
+    );
+
+    expect(timeline.loadCount).toBe(2);
+    expect(timeline.currentPercent).toBeCloseTo(16.67, 2);
+    expect(timeline.segments.map((segment) => [segment.loadName, segment.tone])).toEqual([
+      ["Hot water", "solar"],
+      ["Pool pump", "free"],
+    ]);
+    expect(timeline.nextSegment).toMatchObject({
+      loadId: "hws",
+      reasonCode: "solar_export_qualified",
     });
   });
 });
