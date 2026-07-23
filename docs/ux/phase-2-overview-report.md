@@ -21,6 +21,7 @@
   - operational load groups: Needs attention, Running now, Starting soon, Waiting, and Complete.
 - Updated load summary cards with type labels, type icons, contextual status phrases, fewer visible metadata fields, and stronger state/fault/manual/target hierarchy.
 - Added `frontend/src/features/loads/load-card-presentation.ts` so load-card state phrases, badges, progress labels, and primary actions are deterministic, type-aware, and unit-tested instead of embedded in the card component.
+- Added `frontend/src/features/loads/load-catalogue.ts` and upgraded the dedicated Loads route with local search, status/type filters, sort controls, and status/type/area/priority grouping over the existing read-only backend `load_list` summaries.
 - Preserved optional chart failure fallback and the existing locally bundled ECharts snapshot.
 - Preserved the backend authority boundary: the frontend uses typed backend fields, stable controller state, target status, manual override state, measurements, and reason codes. It does not calculate safety, allocation, deadlines, or action eligibility.
 - Fixed the frontend API facade to preserve optional `site_summary` fields already represented in the model/harness: grid import/export, solar production, cost/energy today, and next deadline.
@@ -39,15 +40,16 @@ No planner, electrical safety, actuator, override, or optimisation semantics wer
 | Overview components | Embedded in page/root | `frontend/src/components/overview/` and `frontend/src/components/energy/` |
 | Timeline | Table-only Plan route | Compact Overview timeline component backed by existing `daily_timeline` plus full Plan route link |
 | Load card | Generic metadata grid | Contextual/type-aware summary card |
+| Loads page | Static card grid | Searchable, sortable, filterable, grouped load catalogue using deterministic presentation rules |
 
 ## Evidence
 
 | Check | Result |
 | --- | --- |
 | `npm --prefix frontend run typecheck` under Node 22.23.0 | Passed |
-| `npm --prefix frontend run test` under Node 22.23.0 | 5 files passed; 29 tests passed |
+| `npm --prefix frontend run test` under Node 22.23.0 | 6 files passed; 33 tests passed |
 | `npm --prefix frontend run test:e2e` under Node 22.23.0 | 4 Playwright tests passed |
-| `scripts/build-frontend && scripts/validate-frontend-bundle` | Passed; bundle size 1,675,000 bytes |
+| `scripts/build-frontend` under Node 22.23.0 and `scripts/validate-frontend-bundle` | Passed; bundle size 1,688,698 bytes |
 | `python3 -m py_compile custom_components/intelligent_load_controller/coordinator.py tests/integration/test_coordinator.py tests/websocket/test_websocket_api.py` | Passed |
 | `scripts/test-backend tests/integration/test_coordinator.py tests/websocket/test_websocket_api.py -q` | Blocked in this shell: Python 3.13 interpreter unavailable |
 
@@ -71,6 +73,7 @@ Browser console notes from Playwright:
 - The attention list now has a backend-ranked warning/override starter contract, but it does not yet cover all Phase 2 attention categories.
 - The Today timeline is a starter compressed interval strip. It does not yet include tariff bands, solar/export bands, actual/manual/blocked categories, deadline markers, or zoom; those remain Phase 4/plan-workspace items unless backend presentation fields arrive earlier.
 - Load cards have type-aware labels, vocabulary, badges, and primary actions, but do not yet include full HWS/EV/battery/generic backend presentation models such as SOC, temperature, source contribution, expected completion, or action eligibility.
+- Loads catalogue area grouping uses optional `load_list` area metadata when present and otherwise places loads into an explicit “No area assigned” group; full area/circuit/category grouping still needs backend presentation fields.
 - Plan and Insights remain largely legacy/table-oriented.
 - No live `https://home-dev.iot.delongis.net` screenshot/console evidence was captured in this slice.
 
@@ -78,5 +81,5 @@ Browser console notes from Playwright:
 
 1. Extend optional backend presentation fields for `site_summary.presentation`, additional `site_summary.attention[]` sources, and richer `load_list` display fields with schema/contract tests.
 2. Add richer backend presentation categories for timeline intervals (`kind`, source, deadline/actual/manual/blocked markers) before expanding the visual into the full Plan workspace.
-3. Continue load-card refinement once backend display fields expose target values, source breakdown, next action metadata, boost presets, and action eligibility.
-4. Capture refreshed Overview screenshots at the required Phase 2 viewports after the fixture/harness can represent HWS, EV, battery, warning, fault, override, and timeline states.
+3. Add backend load presentation fields for area/category/circuit metadata, target values, source breakdown, next action metadata, boost presets, and action eligibility.
+4. Capture refreshed Overview and Loads screenshots at the required Phase 2 viewports after the fixture/harness can represent HWS, EV, battery, warning, fault, override, timeline, and grouped-catalogue states.

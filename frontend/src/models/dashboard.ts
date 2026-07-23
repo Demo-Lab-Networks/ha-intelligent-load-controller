@@ -76,6 +76,7 @@ export interface LoadSummary {
   automatic_control: boolean;
   optimisation_mode?: string;
   priority?: number;
+  area?: string;
   manual_override?: "timed_on" | "timed_off" | "indefinite_on" | "indefinite_off";
   current_power?: Measurement;
   progress?: LoadProgress;

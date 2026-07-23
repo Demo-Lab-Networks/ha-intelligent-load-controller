@@ -264,6 +264,143 @@ describe("intelligent-load-controller-panel", () => {
     });
   });
 
+  it("filters, sorts, and groups the dedicated load catalogue without websocket writes", async () => {
+    const calls: Record<string, unknown>[] = [];
+    const panel = document.createElement(
+      "intelligent-load-controller-panel",
+    ) as IntelligentLoadControllerPanel;
+    panel.hass = createHass((message) => {
+      calls.push(message);
+      switch (message["type"]) {
+        case "intelligent_load_controller/v1/site_list":
+          return { sites: [{ entry_id: "entry-home", site_id: "home", name: "Home" }] };
+        case "intelligent_load_controller/v1/site_summary":
+          return {
+            entry_id: "entry-home",
+            site_id: "home",
+            name: "Home",
+            state: "idle",
+            active_loads: 1,
+            waiting_loads: 2,
+          };
+        case "intelligent_load_controller/v1/load_list":
+          return {
+            loads: [
+              {
+                load_id: "hot-water",
+                name: "Hot water",
+                type: "hot_water",
+                state: "solar_run",
+                reason_code: "solar_export_qualified",
+                automatic_control: true,
+                current_power_w: 2400,
+                target_status: "on_track",
+                priority: 50,
+                area_name: "Plant",
+              },
+              {
+                load_id: "ev",
+                name: "Family EV",
+                type: "binary_ev",
+                state: "waiting_for_window",
+                reason_code: "deadline_catchup",
+                automatic_control: true,
+                target_status: "at_risk",
+                priority: 90,
+                area_name: "Garage",
+              },
+              {
+                load_id: "battery",
+                name: "Battery charger",
+                type: "battery_charger",
+                state: "target_complete",
+                reason_code: "daily_target_met",
+                automatic_control: false,
+                target_status: "complete",
+              },
+              {
+                load_id: "pool",
+                name: "Pool pump",
+                type: "generic_binary",
+                state: "idle",
+                reason_code: "lowest_cost_window",
+                automatic_control: true,
+                priority: 20,
+                area_name: "Yard",
+              },
+            ],
+          };
+        case "intelligent_load_controller/v1/daily_timeline":
+          return { intervals: [], generated_at: null };
+        default:
+          return {};
+      }
+    });
+    document.body.append(panel);
+
+    await vi.waitFor(() => {
+      expect(panel.shadowRoot?.textContent).toContain("Home Status");
+    });
+    const loadsButton = Array.from(panel.shadowRoot?.querySelectorAll(".nav-button") ?? []).find(
+      (button) => button.textContent?.trim().endsWith("Loads"),
+    ) as HTMLButtonElement;
+    loadsButton.click();
+
+    await vi.waitFor(() => {
+      expect(window.location.pathname).toBe("/intelligent-load-controller/loads");
+      expect(panel.shadowRoot?.textContent).toContain("Find and organise loads");
+    });
+
+    const visibleLoadIds = (): readonly string[] =>
+      Array.from(panel.shadowRoot?.querySelectorAll("ilc-load-summary-card") ?? []).map((element) => {
+        const card = element as HTMLElement & { load?: { load_id: string } };
+        return card.load?.load_id ?? "missing";
+      });
+    const search = panel.shadowRoot?.querySelector("#load-catalogue-search") as HTMLInputElement;
+    search.value = "garage";
+    search.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await vi.waitFor(() => {
+      expect(visibleLoadIds()).toEqual(["ev"]);
+    });
+
+    const status = panel.shadowRoot?.querySelector("#load-catalogue-status") as HTMLSelectElement;
+    status.value = "needs_attention";
+    status.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    await vi.waitFor(() => {
+      expect(panel.shadowRoot?.textContent).toContain("1 of 4 load(s)");
+      expect(visibleLoadIds()).toEqual(["ev"]);
+    });
+
+    search.value = "";
+    search.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    const group = panel.shadowRoot?.querySelector("#load-catalogue-group") as HTMLSelectElement;
+    group.value = "none";
+    group.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    const sort = panel.shadowRoot?.querySelector("#load-catalogue-sort") as HTMLSelectElement;
+    sort.value = "highest_power";
+    sort.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    status.value = "all";
+    status.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    await vi.waitFor(() => {
+      expect(visibleLoadIds()[0]).toBe("hot-water");
+    });
+
+    group.value = "area";
+    group.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    await vi.waitFor(() => {
+      expect(panel.shadowRoot?.textContent).toContain("Garage");
+      expect(panel.shadowRoot?.textContent).toContain("No area assigned");
+    });
+
+    expect(calls.map((call) => call["type"])).not.toEqual(
+      expect.arrayContaining([
+        "intelligent_load_controller/v1/automatic_control_set",
+        "intelligent_load_controller/v1/override_start",
+        "intelligent_load_controller/v1/override_clear",
+      ]),
+    );
+  });
+
   it("shows a reconnecting state without issuing a websocket command", async () => {
     const callWS = vi.fn();
     const panel = document.createElement(

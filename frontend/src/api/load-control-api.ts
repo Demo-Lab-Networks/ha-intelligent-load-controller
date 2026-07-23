@@ -187,6 +187,8 @@ export interface LoadListItemResponse {
   automatic_control?: boolean;
   optimisation_mode?: string;
   priority?: number;
+  area?: string;
+  area_name?: string;
   override?: unknown;
   manual_override?: LoadSummary["manual_override"];
   current_power?: Measurement;
@@ -496,6 +498,7 @@ function normalizeLoadSummary(response: LoadListItemResponse): LoadSummary {
     automatic_control: response.automatic_control ?? false,
     optimisation_mode: response.optimisation_mode,
     priority: response.priority,
+    area: response.area_name ?? response.area,
     manual_override: response.manual_override ?? overrideMode(response.override),
     current_power: response.current_power ?? measurementFromWatts(response.current_power_w),
     progress: response.progress,

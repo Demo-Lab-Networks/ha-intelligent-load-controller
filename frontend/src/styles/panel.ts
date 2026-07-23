@@ -485,6 +485,34 @@ export const panelStyles = [ilcDesignTokens, css`
       margin-block-end: 1rem;
     }
 
+    .load-catalogue-controls {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .load-catalogue-controls h3,
+    .load-catalogue-group h3 {
+      font-size: 1rem;
+    }
+
+    .load-catalogue-groups {
+      display: grid;
+      gap: 1.5rem;
+      margin-block-start: 1rem;
+    }
+
+    .load-catalogue-group {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    .load-catalogue-group-header {
+      align-items: center;
+      display: flex;
+      gap: 0.75rem;
+      justify-content: space-between;
+    }
+
     .load-grid {
       grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
     }

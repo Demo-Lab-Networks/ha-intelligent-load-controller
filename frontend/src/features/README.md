@@ -13,4 +13,4 @@ Rules:
 Current feature modules:
 
 - `overview/` maps site/load summaries and daily timeline intervals into Overview presentation state.
-- `loads/` maps backend load summaries into type-aware card presentation state and safe navigation/action labels.
+- `loads/` maps backend load summaries into type-aware card presentation state, safe navigation/action labels, and deterministic read-only catalogue search/sort/filter/grouping.
