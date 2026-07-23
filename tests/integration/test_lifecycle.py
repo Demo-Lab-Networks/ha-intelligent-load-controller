@@ -244,7 +244,9 @@ async def test_panel_registers_as_a_custom_panel_with_local_bundle(hass, monkeyp
         await async_register_panel(hass)
 
     register_static_paths.assert_awaited_once()
-    static_paths = register_static_paths.await_args.args[0]
+    await_args = register_static_paths.await_args
+    assert await_args is not None
+    static_paths = await_args.args[0]
     assert len(static_paths) == 1
     static_path = static_paths[0]
     assert static_path.url_path == PANEL_STATIC_PATH

@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   quality:
+    if: ${{ !contains(github.ref_name, '-') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,6 +39,7 @@ jobs:
         run: npm --prefix frontend run test:e2e
 
   package_validation:
+    if: ${{ !contains(github.ref_name, '-') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,6 +52,7 @@ jobs:
         uses: home-assistant/actions/hassfest@master
 
   publish:
+    if: ${{ !contains(github.ref_name, '-') }}
     needs: [quality, package_validation]
     runs-on: ubuntu-latest
     steps:

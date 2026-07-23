@@ -21,7 +21,7 @@ PANEL_URL_PATH: Final = "intelligent-load-controller"
 PANEL_TITLE: Final = "Load Control"
 PANEL_ICON: Final = "mdi:transmission-tower"
 PANEL_TAG: Final = "intelligent-load-controller-panel"
-PANEL_MODULE_CACHE_VERSION: Final = "0.2.0-alpha.5"
+PANEL_MODULE_CACHE_VERSION: Final = "0.2.0-alpha.6"
 PANEL_MODULE_URL: Final = f"/{DOMAIN}/intelligent-load-controller.js?v={PANEL_MODULE_CACHE_VERSION}"
 PANEL_STATIC_PATH: Final = f"/{DOMAIN}"
 
