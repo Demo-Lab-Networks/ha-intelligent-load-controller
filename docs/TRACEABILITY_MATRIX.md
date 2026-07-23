@@ -290,3 +290,18 @@ The **Implementation area / accountable owner** is an accountable subsystem or w
 This matrix contains all 216 atomic records: `REQ-001` through `REQ-177`, `AC-001` through `AC-017`, `EXIT-00` through `EXIT-11`, and `GATE-001` through `GATE-010`. Each records its source, phase, accountable implementation area, automated test/verification IDs, documentation reference, and a planned acceptance artifact.
 
 All rows remain `Planned`. This structural audit establishes documentation coverage and ownership only; it is not evidence of a verified requirement or a Phase 0 exit. The remaining external publication prerequisites are listed in `EXTERNAL_PREREQUISITES.md` and are not treated as resolved publication authority.
+
+## UX redesign traceability addendum
+
+**Status:** Phase 0 addendum for the 2026-07-23 UX redesign goal. These rows extend the traceability matrix for the redesign programme; they do not mark the original V1 requirements as verified.
+
+| ID | Source | Atomic requirement | Phase | Implementation area / accountable owner | Automated test / verification IDs | Documentation | Planned acceptance artifact | State |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| UXD-001 | UX goal Phase 0 | Current frontend source, backend WebSocket contract, tests, screenshots, and release process are audited before redesign behaviour changes. | UX-0 | Panel + Documentation — current UI audit | Future: T-UI-UX-001 | current-ui-inventory; phase-0-report | Current-state audit and screenshot pack | Documented |
+| UXD-002 | UX goal references | Official Home Assistant, Tesla Energy, SPAN, Amber, Apple, and Material references are synthesised into non-copying design principles. | UX-0 | Documentation — reference benchmark | Future: design review checklist | reference-benchmark | Reference benchmark review | Documented |
+| UXD-003 | UX goal IA | Route-aware Overview, Loads, load detail, Plan, Insights, Settings, and Diagnostics IA is documented before shell implementation. | UX-0/1 | Panel — router and shell | Future: route tests | information-architecture; ADR-0007 | Route-aware shell test report | Documented |
+| UXD-004 | UX goal visual system | Original theme-aware semantic design-token contract is documented. | UX-0/1 | Panel — design system | Future: visual/theme/a11y tests | design-system; ADR-0008 | Design token implementation and contrast review | Documented |
+| UXD-005 | UX goal backend authority | Backend presentation gaps for attention, hero, energy flow, load summary/detail, plan narrative, insights, and stable errors are identified without moving authority to TypeScript. | UX-0/2–5 | HA backend + Panel — presentation models | Future: WS schema/contract tests | backend-presentation-gap-analysis | Optional V1 presentation field contract evidence | Documented |
+| UXD-006 | UX goal component architecture | Monolithic panel decomposition target is documented with app/pages/components/features/state/design/styles boundaries. | UX-0/1 | Panel — component architecture | Future: component/unit tests | gap-analysis; ADR-0008 | Phase 1 component split PR | Documented |
+| UXD-007 | UX goal charts | Chart/timeline/energy-flow visualisation contract preserves local bundle, lazy loading, fallback, textual alternatives, and no blank shell failure. | UX-0/2/4 | Panel + Quality — visualisation | Production bundle test; future chart a11y tests | ADR-0009; design-system | Chart lifecycle and accessibility evidence | Documented |
+| UXD-008 | UX goal Phase 0 | Phase 0 produces wireframes/prototype and phase report without production behavioural changes. | UX-0 | Documentation — UX planning | Future: design review checklist | wireframes; prototype; phase-0-report | Reviewable Phase 0 PR | Documented |
