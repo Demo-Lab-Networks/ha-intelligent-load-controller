@@ -196,6 +196,9 @@ export interface LoadListItemResponse {
   progress?: LoadProgress;
   deadline?: string;
   next_action?: string;
+  next_action_at?: string;
+  next_action_kind?: string;
+  next_action_reason_code?: string;
   target_status?: LoadSummary["target_status"];
   fault?: boolean;
 }
@@ -504,6 +507,9 @@ function normalizeLoadSummary(response: LoadListItemResponse): LoadSummary {
     progress: response.progress,
     deadline: response.deadline,
     next_action: response.next_action,
+    next_action_at: response.next_action_at,
+    next_action_kind: nextActionKind(response.next_action_kind),
+    next_action_reason_code: response.next_action_reason_code,
     target_status: response.target_status,
     fault: response.fault ?? state === "fault",
   };
@@ -603,6 +609,10 @@ function isFiniteNumber(value: unknown): value is number {
 
 function isAttentionSeverity(value: unknown): value is AttentionSeverity {
   return value === "critical" || value === "warning" || value === "info";
+}
+
+function nextActionKind(value: unknown): LoadSummary["next_action_kind"] | undefined {
+  return value === "start" || value === "stop" ? value : undefined;
 }
 
 function overrideMode(value: unknown): LoadSummary["manual_override"] | undefined {

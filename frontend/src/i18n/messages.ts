@@ -206,6 +206,8 @@ export const messages = {
     "load.manual": "Manual override",
     "load.deadline": "Deadline",
     "load.nextAction": "Next action",
+    "load.nextAction.start": "Start {time} · {reason}",
+    "load.nextAction.stop": "Stop {time} · {reason}",
     "load.power": "Power",
     "load.progress": "Progress",
     "load.fault": "Fault",

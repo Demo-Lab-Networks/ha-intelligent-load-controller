@@ -17,6 +17,7 @@ All notable changes will be documented here. The project intends to follow [Keep
 - Deterministic load-card presentation helper with type-aware HWS, EV, battery, and generic load vocabulary.
 - Deterministic load-catalogue presentation helper with local search, status/type filters, sort modes, and status/type/area/priority grouping.
 - Backend-ranked attention items for persisted runtime actuator faults and invalid load configurations.
+- Backend-owned load-card summary fields for measured current power, configured deadline, and structured next planned start/stop action.
 
 ### Changed
 
@@ -29,6 +30,7 @@ All notable changes will be documented here. The project intends to follow [Keep
 - Load summary cards now emphasise priority metrics, target/override/automatic badges, backend reason codes, and contextual non-actuating primary actions.
 - Loads page now renders searchable, sortable, filterable grouped catalogue controls over read-only backend load summaries.
 - Load summaries now expose a read-only `fault` flag when persisted runtime fault evidence exists.
+- Load summary cards now prefer structured next-action time/kind/reason fields and keep the legacy raw `next_action` fallback.
 
 ### Fixed
 

@@ -1672,6 +1672,7 @@ class SiteCoordinator:
                 continue
             load_id = config["load_id"]
             override = overrides.get(load_id)
+            presentation = self._load_summary_presentation(config, load_id)
             result.append(
                 {
                     "load_id": load_id,
@@ -1684,6 +1685,7 @@ class SiteCoordinator:
                     "reason_code": self._load_reason(config, override),
                     "override": override,
                     "fault": self._load_runtime_fault(load_id) is not None,
+                    **presentation,
                     "config_revision": config["config_revision"],
                 }
             )
@@ -2863,6 +2865,75 @@ class SiteCoordinator:
         )
         fault_state = runtime.get("fault_state")
         return fault_state if isinstance(fault_state, str) and fault_state else None
+
+    def _load_summary_presentation(
+        self, config: Mapping[str, Any], load_id: str
+    ) -> dict[str, Any]:
+        """Return optional backend-owned fields for load summary cards."""
+
+        presentation: dict[str, Any] = {}
+        current_power_w = self._load_current_power_w(load_id)
+        if current_power_w is not None:
+            presentation["current_power_w"] = current_power_w
+        deadline = self._load_deadline_at(config)
+        if deadline is not None:
+            presentation["deadline"] = deadline
+        presentation.update(self._next_plan_action_for_load(load_id))
+        return presentation
+
+    def _load_current_power_w(self, load_id: str) -> float | None:
+        """Return current measured load power for panel display, if available."""
+
+        feedback = self._feedback.get(load_id)
+        if feedback is None or feedback.active_power_w is None:
+            return None
+        active_power_w = float(feedback.active_power_w)
+        if not isfinite(active_power_w):
+            return None
+        return round(max(0.0, active_power_w), 3)
+
+    def _load_deadline_at(self, config: Mapping[str, Any]) -> str | None:
+        """Return the configured UTC deadline for a load, if one is defined."""
+
+        requirements = self._mapping_or_empty(config.get("requirements"))
+        deadline = self._parse_deadline(
+            requirements.get("deadline_at") or requirements.get("deadline")
+        )
+        return deadline.isoformat() if deadline is not None else None
+
+    def _next_plan_action_for_load(self, load_id: str) -> dict[str, str]:
+        """Return the next planned start/stop for a load from the stored plan."""
+
+        if not self._last_plan:
+            return {}
+        intervals = self._last_plan.get("intervals")
+        if not isinstance(intervals, list):
+            return {}
+        now = datetime.now(UTC)
+        candidates: list[tuple[datetime, str, str]] = []
+        for interval in intervals:
+            if not isinstance(interval, Mapping) or interval.get("load_id") != load_id:
+                continue
+            start = self._parse_deadline(interval.get("start_at"))
+            end = self._parse_deadline(interval.get("end_at"))
+            if start is None or end is None or end <= now:
+                continue
+            if start <= now:
+                action_at = end
+                action_kind = "stop"
+            else:
+                action_at = start
+                action_kind = "start"
+            reason_code = str(interval.get("reason_code") or "waiting_for_plan")
+            candidates.append((action_at, action_kind, reason_code))
+        if not candidates:
+            return {}
+        action_at, action_kind, reason_code = min(candidates, key=lambda item: item[0])
+        return {
+            "next_action_at": action_at.isoformat(),
+            "next_action_kind": action_kind,
+            "next_action_reason_code": reason_code,
+        }
 
     def _plan_for_load(self, load_id: str) -> list[dict[str, Any]]:
         if not self._last_plan:

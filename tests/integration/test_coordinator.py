@@ -16,7 +16,7 @@ pytest.importorskip(
 
 from homeassistant.config_entries import ConfigSubentry
 
-from custom_components.intelligent_load_controller.adapters import NullAdapter
+from custom_components.intelligent_load_controller.adapters import AdapterFeedback, NullAdapter
 from custom_components.intelligent_load_controller.const import LOAD_SUBENTRY_TYPE
 from custom_components.intelligent_load_controller.coordinator import (
     ConfigConflictError,
@@ -216,6 +216,53 @@ async def test_site_summary_exposes_backend_ranked_attention_items(
         and item["fault"] is True
         for item in listed
     )
+
+
+async def test_load_list_exposes_backend_card_presentation_fields(
+    hass,
+    load_control_config_entry,
+    load_config,
+    runtime_store,
+) -> None:
+    """Load cards receive backend-owned measured power, deadlines and plan actions."""
+
+    deadline_at = datetime.now(UTC) + timedelta(hours=4)
+    scheduled_at = datetime.now(UTC) + timedelta(hours=1)
+    config = dict(load_config)
+    config["requirements"] = {
+        "combination": "all_of",
+        "minimum_runtime_s": 1800,
+        "deadline_at": deadline_at.isoformat(),
+    }
+    coordinator = SiteCoordinator(hass, load_control_config_entry, runtime_store)
+    await coordinator.async_start()
+    created = await coordinator.async_add_load(config)
+    load_id = created["load_id"]
+    coordinator._feedback[load_id] = AdapterFeedback(  # noqa: SLF001
+        observed_at=datetime.now(UTC),
+        available=True,
+        confirmed_state=True,
+        active_power_w=1234.5678,
+    )
+    coordinator._last_plan = {  # noqa: SLF001
+        "intervals": [
+            {
+                "load_id": load_id,
+                "start_at": scheduled_at.isoformat(),
+                "end_at": (scheduled_at + timedelta(minutes=30)).isoformat(),
+                "reason_code": "lowest_cost_window",
+            }
+        ]
+    }
+
+    listed = await coordinator.async_load_list()
+    load_summary = next(item for item in listed if item["load_id"] == load_id)
+
+    assert load_summary["current_power_w"] == 1234.568
+    assert load_summary["deadline"] == created["requirements"]["deadline_at"]
+    assert load_summary["next_action_at"] == scheduled_at.isoformat()
+    assert load_summary["next_action_kind"] == "start"
+    assert load_summary["next_action_reason_code"] == "lowest_cost_window"
 
 
 async def test_site_rejects_duplicate_actuator_bindings_in_writes_and_previews(

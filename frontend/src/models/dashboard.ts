@@ -82,6 +82,9 @@ export interface LoadSummary {
   progress?: LoadProgress;
   deadline?: string;
   next_action?: string;
+  next_action_at?: string;
+  next_action_kind?: "start" | "stop";
+  next_action_reason_code?: string;
   target_status?: "on_track" | "at_risk" | "impossible" | "complete" | "unknown";
   fault?: boolean;
 }

@@ -88,6 +88,11 @@ describe("LoadControlApi", () => {
               reason_code: "lowest_cost_window",
               automatic_control: true,
               fault: true,
+              current_power_w: 1234.56,
+              deadline: "2026-07-23T20:00:00Z",
+              next_action_at: "2026-07-23T11:00:00Z",
+              next_action_kind: "start",
+              next_action_reason_code: "lowest_cost_window",
             },
           ],
         };
@@ -128,7 +133,19 @@ describe("LoadControlApi", () => {
           },
         ],
       },
-      loads: [{ load_id: "hws", load_type: "hot_water", controller_state: "idle", fault: true }],
+      loads: [
+        {
+          load_id: "hws",
+          load_type: "hot_water",
+          controller_state: "idle",
+          fault: true,
+          current_power: { value: 1234.56, unit: "W" },
+          deadline: "2026-07-23T20:00:00Z",
+          next_action_at: "2026-07-23T11:00:00Z",
+          next_action_kind: "start",
+          next_action_reason_code: "lowest_cost_window",
+        },
+      ],
     });
     expect(calls).toEqual(
       expect.arrayContaining([

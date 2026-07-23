@@ -48,7 +48,7 @@ export class IlcLoadSummaryCard extends LitElement {
           ${this.renderFocusMetric(presentation.progressLabelKey, this.formatProgress(load.progress), "progress", load.progress?.percent)}
           ${this.renderFocusMetric(
             "load.nextAction",
-            load.next_action ?? translate(this.hass, presentation.nextActionFallbackKey),
+            this.formatNextAction(load, presentation.nextActionFallbackKey),
             "next",
           )}
         </div>
@@ -124,6 +124,23 @@ export class IlcLoadSummaryCard extends LitElement {
       return `${progress.current}/${progress.target}${unit}`;
     }
     return "—";
+  }
+
+  private formatNextAction(load: LoadSummary, fallbackKey: Parameters<typeof translate>[1]): string {
+    if (load.next_action) {
+      return load.next_action;
+    }
+    if (load.next_action_at) {
+      const time = formatDateTime(this.hass, load.next_action_at);
+      const reason = load.next_action_reason_code
+        ? localizeReasonCode(this.hass, load.next_action_reason_code)
+        : translate(this.hass, "value.unavailable");
+      if (load.next_action_kind === "stop") {
+        return translate(this.hass, "load.nextAction.stop", { time, reason });
+      }
+      return translate(this.hass, "load.nextAction.start", { time, reason });
+    }
+    return translate(this.hass, fallbackKey);
   }
 
   private get locale(): string {
