@@ -105,3 +105,22 @@ Prepare that submission from the canonical root assets in this repository:
 - `brand/icon@2x.png`
 - `brand/logo.png`
 - `brand/logo@2x.png`
+
+Target location in a `home-assistant/brands` pull request:
+
+- `custom_integrations/intelligent_load_controller/icon.png`
+- `custom_integrations/intelligent_load_controller/icon@2x.png`
+- `custom_integrations/intelligent_load_controller/logo.png`
+- `custom_integrations/intelligent_load_controller/logo@2x.png`
+
+Staging commands from this repository root:
+
+```bash
+mkdir -p ../brands/custom_integrations/intelligent_load_controller
+cp brand/icon.png ../brands/custom_integrations/intelligent_load_controller/icon.png
+cp brand/icon@2x.png ../brands/custom_integrations/intelligent_load_controller/icon@2x.png
+cp brand/logo.png ../brands/custom_integrations/intelligent_load_controller/logo.png
+cp brand/logo@2x.png ../brands/custom_integrations/intelligent_load_controller/logo@2x.png
+```
+
+Do not create that external pull request until the maintainer approves it. Record the Home Assistant Core and HACS versions that still need the CDN-backed icon path before opening the submission.
