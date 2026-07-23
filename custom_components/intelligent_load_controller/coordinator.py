@@ -3019,7 +3019,7 @@ class SiteCoordinator:
         current_warnings = (
             self._current_warnings(overrides=overrides, site_config=config, configs=load_configs)
             if warnings is None
-            else list(warnings)
+            else [dict(item) for item in warnings]
         )
         current_overrides = self._active_overrides() if overrides is None else overrides
         load_names = {
