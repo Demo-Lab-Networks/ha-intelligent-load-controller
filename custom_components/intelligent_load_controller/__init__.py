@@ -6,6 +6,7 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+import homeassistant.helpers.config_validation as cv
 
 from .const import (
     CONFIG_ENTRY_MINOR_VERSION,
@@ -23,6 +24,7 @@ from .storage import RuntimeStore
 from .websocket_api import async_register_websocket_api, async_unregister_websocket_api
 
 type IntelligentLoadControllerConfigEntry = ConfigEntry[SiteCoordinator]
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
