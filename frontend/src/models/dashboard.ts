@@ -19,6 +19,47 @@ export interface CurrencyRate {
   quality?: DataQuality;
 }
 
+export type AttentionSeverity = "critical" | "warning" | "info";
+
+export interface SiteAttentionItem {
+  id: string;
+  code: string;
+  rank: number;
+  severity: AttentionSeverity;
+  reason_code?: string;
+  affected_kind?: "site" | "load";
+  affected_id?: string;
+  display_name?: string;
+  action?: string;
+}
+
+export type SitePresentationLevel = "ok" | "info" | "warning" | "critical" | "unknown";
+export type SiteFlowDirection = "exporting" | "importing" | "balanced" | "unknown";
+
+export interface SiteTargetSummary {
+  total: number;
+  complete: number;
+  onTrack: number;
+  atRisk: number;
+  impossible: number;
+  unknown: number;
+}
+
+export interface SitePresentation {
+  status_level?: SitePresentationLevel;
+  status_code?: string;
+  summary_code?: string;
+  summary_values?: Readonly<Record<string, string | number>>;
+  flow_direction?: SiteFlowDirection;
+  target_summary?: SiteTargetSummary;
+  decision_reason_code?: string;
+  next_action_at?: string;
+  next_action_kind?: "start" | "stop";
+  next_action_load_id?: string;
+  next_action_display_name?: string;
+  next_action_reason_code?: string;
+}
+
 /** Stable dashboard contract returned by `site_summary` version 1. */
 export interface SiteSummary {
   site_id: string;
@@ -39,6 +80,9 @@ export interface SiteSummary {
   next_deadline?: string;
   health: "healthy" | "warning" | "error" | "unknown";
   updated_at?: string;
+  attention_count?: number;
+  attention?: readonly SiteAttentionItem[];
+  presentation?: SitePresentation;
 }
 
 export interface LoadProgress {
@@ -60,11 +104,15 @@ export interface LoadSummary {
   automatic_control: boolean;
   optimisation_mode?: string;
   priority?: number;
+  area?: string;
   manual_override?: "timed_on" | "timed_off" | "indefinite_on" | "indefinite_off";
   current_power?: Measurement;
   progress?: LoadProgress;
   deadline?: string;
   next_action?: string;
+  next_action_at?: string;
+  next_action_kind?: "start" | "stop";
+  next_action_reason_code?: string;
   target_status?: "on_track" | "at_risk" | "impossible" | "complete" | "unknown";
   fault?: boolean;
 }

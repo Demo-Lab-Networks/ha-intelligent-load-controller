@@ -8,6 +8,41 @@ All notable changes will be documented here. The project intends to follow [Keep
 
 - Canonical root `brand/` assets for HACS package validation plus synced integration-local brand assets for Home Assistant 2026.3+.
 - Deterministic brand sync/validation tooling, CI brand checking, and troubleshooting/runbook documentation for icon cache refresh, CDN-backed HACS surfaces, and pre-2026.3 branding limits.
+- UX redesign Phase 1 shell slice: route-aware Overview/Loads/load-detail/Plan/Insights/Settings/Diagnostics navigation, design tokens, shell/router/feedback/status primitives, and local visual baseline screenshots.
+- Read-only frontend diagnostics route and API facade convenience method.
+- Route-level page modules for Overview, Loads, load detail, Plan, Insights, Settings, and Diagnostics, plus shared load summary and plan table/proposal components.
+- UX redesign Phase 2 Overview starter slice: Home Status hero, live energy-flow summary, attention list, focused Today KPIs, grouped active/upcoming loads, and deterministic overview presentation helpers.
+- Optional V1 `site_summary.attention[]` backend presentation field for backend-ranked warning and manual-override attention items.
+- Compressed Overview Today timeline component backed by the existing read-only `daily_timeline` WebSocket command.
+- Deterministic load-card presentation helper with type-aware HWS, EV, battery, and generic load vocabulary.
+- Deterministic load-catalogue presentation helper with local search, status/type filters, sort modes, and status/type/area/priority grouping.
+- Backend-ranked attention items for persisted runtime actuator faults and invalid load configurations.
+- Backend-owned load-card summary fields for measured current power, configured deadline, and structured next planned start/stop action.
+- Backend-owned load-card target progress and target status fields derived from bounded runtime/feedback evidence and stored plan risk.
+- Backend-ranked attention items for impossible targets, at-risk targets, and approaching load deadlines.
+- Optional V1 `site_summary.presentation` backend presentation field for the Home Status hero, including status/summary codes, target counts, grid-flow direction, decision reason, and next planned load action fields.
+
+### Changed
+
+- Rebuilt the committed frontend bundle for the Phase 1 shell slice.
+- Local Playwright harness now feeds direct panel paths into the custom panel route property for route testing.
+- Reduced the root panel component by moving presentational page rendering, including Settings and load-detail controls, into dedicated modules.
+- Replaced the Overview equal-weight metric wall with a stronger everyday-operation hierarchy and more contextual load summary cards.
+- Overview attention now prefers backend-owned rank/severity/action data when available while preserving typed-field fallback behaviour for older summaries.
+- Plan route data loading now distinguishes the full current plan from the lightweight Overview timeline preload.
+- Load summary cards now emphasise priority metrics, target/override/automatic badges, backend reason codes, and contextual non-actuating primary actions.
+- Loads page now renders searchable, sortable, filterable grouped catalogue controls over read-only backend load summaries.
+- Load summaries now expose a read-only `fault` flag when persisted runtime fault evidence exists.
+- Load summary cards now prefer structured next-action time/kind/reason fields and keep the legacy raw `next_action` fallback.
+- The Overview Home Status hero now prefers backend-owned presentation fields and keeps the older typed-field derivation as a compatibility fallback.
+
+### Fixed
+
+- Guarded Apache ECharts initialization so repeated renders do not create duplicate chart instances.
+- Ensured dark-theme shell backgrounds fill the viewport on short pages.
+- Replaced raw JSON rendering for ordinary Insights daily summaries with labelled fields and a Diagnostics fallback for complex values.
+- Preserved optional site summary measurements in the frontend API facade so grid, solar, cost, energy, and deadline values render when the backend provides them.
+- Added missing frontend reason-code translations for visible planner/site attention codes used by overview explanations.
 
 ## [0.2.0] - Initial 0.2 baseline
 

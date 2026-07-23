@@ -1612,34 +1612,48 @@ class SiteCoordinator:
         active_feedback = [
             feedback for feedback in self._feedback.values() if feedback.confirmed_state
         ]
+        valid_load_configs = [
+            config for _, config in loads if config.get("load_id") and not config.get("invalid")
+        ]
+        active_load_count = len(active_feedback)
+        waiting_load_count = max(0, len(valid_load_configs) - active_load_count)
         snapshot = self._site_snapshot(config)
+        warnings = self._current_warnings(overrides=overrides, site_config=config)
+        attention = self._attention_items(
+            overrides=overrides,
+            site_config=config,
+            configs=[item for _, item in loads],
+            warnings=warnings,
+        )
+        presentation = self._site_summary_presentation(
+            config=config,
+            load_configs=valid_load_configs,
+            attention=attention,
+            active_load_count=active_load_count,
+            waiting_load_count=waiting_load_count,
+            snapshot=snapshot,
+        )
         return {
             "entry_id": self.entry.entry_id,
             "site_id": self.entry.data.get("site_id"),
             "name": config["site_name"],
             "config_revision": config["config_revision"],
             "state": "initialising" if not self._started else "idle",
-            "active_loads": len(active_feedback),
-            "waiting_loads": max(
-                0,
-                len(
-                    [
-                        config
-                        for _, config in loads
-                        if config.get("load_id") and not config.get("invalid")
-                    ]
-                )
-                - len(active_feedback),
-            ),
+            "active_loads": active_load_count,
+            "waiting_loads": waiting_load_count,
             "total_controlled_power_w": round(
                 sum(max(0.0, feedback.active_power_w or 0.0) for feedback in active_feedback), 3
             ),
+            **self._site_summary_measurements(snapshot),
             "next_action": self._last_plan.get("next_action") if self._last_plan else None,
             "constraint_status": "ok"
             if snapshot.available and self._core_site_config(config) is not None
             else "attention",
             "last_replan_at": self._last_replan_at.isoformat() if self._last_replan_at else None,
-            "warnings": self._current_warnings(overrides=overrides, site_config=config),
+            "warnings": warnings,
+            "attention_count": len(attention),
+            "attention": attention,
+            "presentation": presentation,
         }
 
     async def async_load_list(self) -> list[dict[str, Any]]:
@@ -1651,14 +1665,19 @@ class SiteCoordinator:
             if config.get("invalid"):
                 result.append(
                     {
+                        "load_id": config.get("load_id"),
                         "name": config["display_name"],
                         "state": "fault",
+                        "reason_code": "load_configuration_invalid",
+                        "automatic_control": False,
+                        "fault": True,
                         "validation": config["invalid"],
                     }
                 )
                 continue
             load_id = config["load_id"]
             override = overrides.get(load_id)
+            presentation = self._load_summary_presentation(config, load_id)
             result.append(
                 {
                     "load_id": load_id,
@@ -1670,6 +1689,8 @@ class SiteCoordinator:
                     "state": self._load_state(config, override),
                     "reason_code": self._load_reason(config, override),
                     "override": override,
+                    "fault": self._load_runtime_fault(load_id) is not None,
+                    **presentation,
                     "config_revision": config["config_revision"],
                 }
             )
@@ -2839,6 +2860,530 @@ class SiteCoordinator:
             return "automatic_control_disabled"
         return "restart_stabilisation" if not self._started else "waiting_for_plan"
 
+    def _load_runtime_fault(self, load_id: object) -> str | None:
+        """Return the persisted runtime fault code for a configured load, if any."""
+
+        if not isinstance(load_id, str):
+            return None
+        runtime = self._load_runtime_for(load_id)
+        fault_state = runtime.get("fault_state")
+        return fault_state if isinstance(fault_state, str) and fault_state else None
+
+    def _load_summary_presentation(self, config: Mapping[str, Any], load_id: str) -> dict[str, Any]:
+        """Return optional backend-owned fields for load summary cards."""
+
+        presentation: dict[str, Any] = {}
+        current_power_w = self._load_current_power_w(load_id)
+        if current_power_w is not None:
+            presentation["current_power_w"] = current_power_w
+        deadline = self._load_deadline_at(config)
+        if deadline is not None:
+            presentation["deadline"] = deadline
+        progress = self._load_target_progress(config, load_id)
+        if progress is not None:
+            presentation["progress"] = progress
+        target_status = self._load_target_status(config, load_id, progress)
+        if target_status is not None:
+            presentation["target_status"] = target_status
+        presentation.update(self._next_plan_action_for_load(load_id))
+        return presentation
+
+    @staticmethod
+    def _site_summary_measurements(snapshot: SitePowerSnapshot) -> dict[str, Any]:
+        """Return bounded live site measurements for panel display."""
+
+        payload: dict[str, Any] = {}
+        if snapshot.available:
+            payload["grid_import"] = {
+                "value": round(max(0.0, snapshot.grid_import_w), 3),
+                "unit": "W",
+                "quality": "measured",
+            }
+            payload["grid_export"] = {
+                "value": round(max(0.0, -snapshot.grid_import_w), 3),
+                "unit": "W",
+                "quality": "measured",
+            }
+        if snapshot.solar_generation_w is not None:
+            payload["solar_production"] = {
+                "value": round(max(0.0, snapshot.solar_generation_w), 3),
+                "unit": "W",
+                "quality": "measured",
+            }
+        phase_pairs = (
+            snapshot.phase_import_w.items()
+            if isinstance(snapshot.phase_import_w, Mapping)
+            else snapshot.phase_import_w
+        )
+        for phase, value in phase_pairs:
+            phase_key = phase.lower()
+            if phase_key not in {"a", "b", "c"}:
+                continue
+            payload[f"phase_{phase_key}_power"] = {
+                "value": round(float(value), 3),
+                "unit": "W",
+                "quality": "measured",
+            }
+        return payload
+
+    def _site_summary_presentation(
+        self,
+        *,
+        config: Mapping[str, Any],
+        load_configs: Sequence[Mapping[str, Any]],
+        attention: Sequence[Mapping[str, Any]],
+        active_load_count: int,
+        waiting_load_count: int,
+        snapshot: SitePowerSnapshot,
+    ) -> dict[str, Any]:
+        """Return backend-owned Home Status presentation metadata."""
+
+        target_summary = self._site_target_summary(load_configs)
+        next_action = self._next_site_plan_action(load_configs)
+        status = self._site_presentation_status(
+            attention=attention,
+            active_load_count=active_load_count,
+            waiting_load_count=waiting_load_count,
+            load_count=len(load_configs),
+            snapshot=snapshot,
+        )
+        presentation: dict[str, Any] = {
+            **status,
+            "flow_direction": self._site_flow_direction(snapshot),
+            "target_summary": target_summary,
+        }
+        reason_code = self._site_decision_reason(
+            load_configs=load_configs,
+            attention=attention,
+            next_action=next_action,
+        )
+        if reason_code is not None:
+            presentation["decision_reason_code"] = reason_code
+        presentation.update(next_action)
+        return presentation
+
+    def _site_target_summary(
+        self,
+        load_configs: Sequence[Mapping[str, Any]],
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, int]:
+        """Return target health counts across configured target-bearing loads."""
+
+        current_time = datetime.now(UTC) if now is None else now
+        summary = {
+            "total": 0,
+            "complete": 0,
+            "on_track": 0,
+            "at_risk": 0,
+            "impossible": 0,
+            "unknown": 0,
+        }
+        for config in load_configs:
+            load_id = config.get("load_id")
+            if not isinstance(load_id, str) or not self._load_has_target(config):
+                continue
+            summary["total"] += 1
+            progress = self._load_target_progress(config, load_id)
+            status = self._load_target_status(config, load_id, progress, now=current_time)
+            if status in {"complete", "on_track", "at_risk", "impossible"}:
+                summary[status] += 1
+            else:
+                summary["unknown"] += 1
+        return summary
+
+    def _next_site_plan_action(
+        self,
+        load_configs: Sequence[Mapping[str, Any]],
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, str]:
+        """Return the next planned site action using stored plan evidence."""
+
+        if not self._last_plan:
+            return {}
+        intervals = self._last_plan.get("intervals")
+        if not isinstance(intervals, list):
+            return {}
+        current_time = datetime.now(UTC) if now is None else now
+        load_names = {
+            str(config.get("load_id")): str(
+                config.get("display_name") or config.get("name") or config.get("load_id")
+            )
+            for config in load_configs
+            if isinstance(config.get("load_id"), str)
+        }
+        candidates: list[tuple[datetime, str, dict[str, str]]] = []
+        for interval in intervals:
+            if not isinstance(interval, Mapping):
+                continue
+            load_id = interval.get("load_id")
+            if not isinstance(load_id, str):
+                continue
+            start = self._parse_deadline(interval.get("start_at"))
+            end = self._parse_deadline(interval.get("end_at"))
+            if start is None or end is None or end <= current_time:
+                continue
+            if start <= current_time:
+                action_at = end
+                action_kind = "stop"
+            else:
+                action_at = start
+                action_kind = "start"
+            reason_code = str(interval.get("reason_code") or "waiting_for_plan")
+            payload = {
+                "next_action_at": action_at.isoformat(),
+                "next_action_kind": action_kind,
+                "next_action_load_id": load_id,
+                "next_action_display_name": load_names.get(load_id, load_id),
+                "next_action_reason_code": reason_code,
+            }
+            candidates.append((action_at, load_id, payload))
+        if not candidates:
+            return {}
+        _, _, payload = min(candidates, key=lambda item: (item[0], item[1]))
+        return payload
+
+    @staticmethod
+    def _site_presentation_status(
+        *,
+        attention: Sequence[Mapping[str, Any]],
+        active_load_count: int,
+        waiting_load_count: int,
+        load_count: int,
+        snapshot: SitePowerSnapshot,
+    ) -> dict[str, Any]:
+        """Return stable status/summary codes for the Home Status hero."""
+
+        if any(item.get("severity") == "critical" for item in attention):
+            return {
+                "status_level": "critical",
+                "status_code": "needs_attention",
+                "summary_code": "attention",
+                "summary_values": {"count": len(attention)},
+            }
+        if any(item.get("severity") == "warning" for item in attention):
+            return {
+                "status_level": "warning",
+                "status_code": "watch",
+                "summary_code": "attention",
+                "summary_values": {"count": len(attention)},
+            }
+        if active_load_count > 0:
+            return {
+                "status_level": "info",
+                "status_code": "controlling",
+                "summary_code": "active",
+                "summary_values": {
+                    "active": active_load_count,
+                    "waiting": waiting_load_count,
+                },
+            }
+        flow_direction = SiteCoordinator._site_flow_direction(snapshot)
+        if flow_direction == "exporting":
+            status_code = "exporting"
+        elif flow_direction == "importing":
+            status_code = "importing"
+        else:
+            status_code = "monitoring"
+        return {
+            "status_level": "ok" if snapshot.available else "unknown",
+            "status_code": status_code,
+            "summary_code": "monitoring",
+            "summary_values": {
+                "waiting": waiting_load_count,
+                "total": load_count,
+            },
+        }
+
+    @staticmethod
+    def _site_flow_direction(snapshot: SitePowerSnapshot) -> str:
+        """Return a coarse grid-flow direction for site presentation."""
+
+        if not snapshot.available:
+            return "unknown"
+        if snapshot.grid_import_w > 1:
+            return "importing"
+        if snapshot.grid_import_w < -1:
+            return "exporting"
+        return "balanced"
+
+    def _site_decision_reason(
+        self,
+        *,
+        load_configs: Sequence[Mapping[str, Any]],
+        attention: Sequence[Mapping[str, Any]],
+        next_action: Mapping[str, str],
+    ) -> str | None:
+        """Return the most relevant stable reason code for the site hero."""
+
+        for item in attention:
+            if item.get("severity") in {"critical", "warning"}:
+                reason_code = item.get("reason_code") or item.get("code")
+                if isinstance(reason_code, str) and reason_code:
+                    return reason_code
+        reason_code = next_action.get("next_action_reason_code")
+        if isinstance(reason_code, str) and reason_code:
+            return reason_code
+        for config in load_configs:
+            load_id = config.get("load_id")
+            if not isinstance(load_id, str):
+                continue
+            plan_reason = self._load_primary_plan_reason(load_id, "")
+            if plan_reason:
+                return plan_reason
+        return "waiting_for_plan"
+
+    def _load_runtime_for(self, load_id: str) -> dict[str, Any]:
+        """Return bounded persisted runtime evidence for one load."""
+
+        return self._mapping_or_empty(
+            self._mapping_or_empty(self._recovery.get("load_runtime")).get(load_id)
+        )
+
+    def _load_current_power_w(self, load_id: str) -> float | None:
+        """Return current measured load power for panel display, if available."""
+
+        feedback = self._feedback.get(load_id)
+        if feedback is None or feedback.active_power_w is None:
+            return None
+        active_power_w = float(feedback.active_power_w)
+        if not isfinite(active_power_w):
+            return None
+        return round(max(0.0, active_power_w), 3)
+
+    def _load_deadline_at(self, config: Mapping[str, Any]) -> str | None:
+        """Return the configured UTC deadline for a load, if one is defined."""
+
+        deadline = self._load_deadline_datetime(config)
+        return deadline.isoformat() if deadline is not None else None
+
+    def _load_deadline_datetime(self, config: Mapping[str, Any]) -> datetime | None:
+        """Return the configured UTC deadline instant for a load, if one is defined."""
+
+        requirements = self._mapping_or_empty(config.get("requirements"))
+        return self._parse_deadline(requirements.get("deadline_at") or requirements.get("deadline"))
+
+    def _load_target_progress(
+        self, config: Mapping[str, Any], load_id: str
+    ) -> dict[str, Any] | None:
+        """Return display-safe target progress using feedback/recovery evidence."""
+
+        requirements = self._mapping_or_empty(config.get("requirements"))
+        runtime = self._load_runtime_for(load_id)
+        feedback = self._feedback.get(load_id)
+
+        target_soc = self._as_positive(requirements.get("target_soc_pct"))
+        if target_soc is not None:
+            current_soc = self._first_nonnegative(
+                feedback.state_of_charge_pct if feedback is not None else None,
+                runtime.get("state_of_charge_pct"),
+            )
+            if current_soc is not None:
+                return self._progress_payload(current_soc, target_soc, "%")
+
+        target_temperature = self._as_nonnegative(requirements.get("target_temperature_c"))
+        if target_temperature is not None:
+            current_temperature = self._first_nonnegative(
+                feedback.temperature_c if feedback is not None else None,
+                runtime.get("temperature_c"),
+            )
+            if current_temperature is not None:
+                return self._progress_payload(
+                    current_temperature,
+                    target_temperature,
+                    "°C",
+                    include_percent=False,
+                )
+
+        energy_target_kwh = self._as_positive(requirements.get("minimum_energy_kwh"))
+        energy_target_wh = self._first_positive(
+            requirements.get("minimum_energy_wh"),
+            requirements.get("target_energy_wh"),
+            energy_target_kwh * 1000 if energy_target_kwh is not None else None,
+        )
+        if energy_target_wh is not None:
+            completed_energy_kwh = self._nonnegative_number(runtime.get("energy_today_kwh"))
+            return self._progress_payload(completed_energy_kwh, energy_target_wh / 1000, "kWh")
+
+        runtime_target_s = self._first_positive(
+            requirements.get("minimum_confirmed_runtime_s"),
+            requirements.get("minimum_runtime_s"),
+            requirements.get("target_runtime_s"),
+        )
+        if runtime_target_s is not None:
+            completed_runtime_s = (
+                self._nonnegative_number(runtime.get("confirmed_runtime_today_h")) * 3600
+            )
+            return self._progress_payload(completed_runtime_s / 60, runtime_target_s / 60, "min")
+
+        return None
+
+    def _load_target_status(
+        self,
+        config: Mapping[str, Any],
+        load_id: str,
+        progress: Mapping[str, Any] | None,
+        *,
+        now: datetime | None = None,
+    ) -> str | None:
+        """Return backend-owned target health for load-card presentation."""
+
+        if self._progress_complete(progress):
+            return "complete"
+        current_time = datetime.now(UTC) if now is None else now
+
+        plan_result = self._load_plan_result(load_id)
+        if plan_result:
+            unmet_slots = self._nonnegative_number(plan_result.get("unmet_slots"))
+            reason_codes = plan_result.get("reason_codes")
+            if unmet_slots > 0:
+                if isinstance(reason_codes, list) and "deadline_impossible" in reason_codes:
+                    return "impossible"
+                return "at_risk"
+            if self._nonnegative_number(plan_result.get("required_slots")) > 0:
+                return "on_track"
+
+        requirements = self._mapping_or_empty(config.get("requirements"))
+        deadline = self._parse_deadline(
+            requirements.get("deadline_at") or requirements.get("deadline")
+        )
+        if deadline is not None and deadline <= current_time:
+            return "at_risk"
+
+        if progress is not None or self._load_has_target(config):
+            return "unknown"
+        return None
+
+    def _load_plan_result(self, load_id: str) -> dict[str, Any]:
+        """Return serialized backend plan evidence for one load, if available."""
+
+        if not self._last_plan:
+            return {}
+        loads = self._last_plan.get("loads")
+        if not isinstance(loads, list):
+            return {}
+        for item in loads:
+            if isinstance(item, Mapping) and item.get("load_id") == load_id:
+                return self._mapping_or_empty(item)
+        return {}
+
+    def _load_primary_plan_reason(self, load_id: str, default: str) -> str:
+        """Return the first stable plan reason for display, if available."""
+
+        reason_codes = self._load_plan_result(load_id).get("reason_codes")
+        if isinstance(reason_codes, list):
+            for reason_code in reason_codes:
+                if isinstance(reason_code, str) and reason_code:
+                    return reason_code
+        return default
+
+    def _load_has_target(self, config: Mapping[str, Any]) -> bool:
+        """Return whether the load has a configured target/deadline requirement."""
+
+        requirements = self._mapping_or_empty(config.get("requirements"))
+        has_quantity_target = (
+            any(
+                self._as_positive(requirements.get(field)) is not None
+                for field in (
+                    "minimum_confirmed_runtime_s",
+                    "minimum_runtime_s",
+                    "target_runtime_s",
+                    "minimum_energy_wh",
+                    "target_energy_wh",
+                    "minimum_energy_kwh",
+                    "target_soc_pct",
+                )
+            )
+            or self._as_nonnegative(requirements.get("target_temperature_c")) is not None
+        )
+        deadline = self._parse_deadline(
+            requirements.get("deadline_at") or requirements.get("deadline")
+        )
+        return has_quantity_target or deadline is not None
+
+    @classmethod
+    def _first_nonnegative(cls, *values: object) -> float | None:
+        """Return the first finite non-negative observation from trusted inputs."""
+
+        for value in values:
+            number = cls._as_nonnegative(value)
+            if number is not None:
+                return number
+        return None
+
+    @staticmethod
+    def _progress_payload(
+        current: float,
+        target: float,
+        unit: str,
+        *,
+        include_percent: bool = True,
+    ) -> dict[str, Any]:
+        """Build a bounded load-progress display payload."""
+
+        payload: dict[str, Any] = {
+            "current": round(max(0.0, current), 3),
+            "target": round(max(0.0, target), 3),
+            "unit": unit,
+        }
+        if include_percent and target > 0:
+            payload["percent"] = round(min(100.0, max(0.0, current / target * 100)), 1)
+        return payload
+
+    @staticmethod
+    def _progress_complete(progress: Mapping[str, Any] | None) -> bool:
+        """Return whether a progress payload demonstrates target completion."""
+
+        if progress is None:
+            return False
+        percent = progress.get("percent")
+        if isinstance(percent, int | float) and isfinite(float(percent)):
+            return float(percent) >= 100
+        current = progress.get("current")
+        target = progress.get("target")
+        return (
+            isinstance(current, int | float)
+            and isinstance(target, int | float)
+            and isfinite(float(current))
+            and isfinite(float(target))
+            and float(current) >= float(target)
+        )
+
+    def _next_plan_action_for_load(self, load_id: str) -> dict[str, str]:
+        """Return the next planned start/stop for a load from the stored plan."""
+
+        if not self._last_plan:
+            return {}
+        intervals = self._last_plan.get("intervals")
+        if not isinstance(intervals, list):
+            return {}
+        now = datetime.now(UTC)
+        candidates: list[tuple[datetime, str, str]] = []
+        for interval in intervals:
+            if not isinstance(interval, Mapping) or interval.get("load_id") != load_id:
+                continue
+            start = self._parse_deadline(interval.get("start_at"))
+            end = self._parse_deadline(interval.get("end_at"))
+            if start is None or end is None or end <= now:
+                continue
+            if start <= now:
+                action_at = end
+                action_kind = "stop"
+            else:
+                action_at = start
+                action_kind = "start"
+            reason_code = str(interval.get("reason_code") or "waiting_for_plan")
+            candidates.append((action_at, action_kind, reason_code))
+        if not candidates:
+            return {}
+        action_at, action_kind, reason_code = min(candidates, key=lambda item: item[0])
+        return {
+            "next_action_at": action_at.isoformat(),
+            "next_action_kind": action_kind,
+            "next_action_reason_code": reason_code,
+        }
+
     def _plan_for_load(self, load_id: str) -> list[dict[str, Any]]:
         if not self._last_plan:
             return []
@@ -2905,6 +3450,247 @@ class SiteCoordinator:
                 }
             )
         return warnings
+
+    def _attention_items(
+        self,
+        *,
+        overrides: Mapping[str, Mapping[str, Any]] | None = None,
+        site_config: Mapping[str, Any] | None = None,
+        configs: Sequence[Mapping[str, Any]] | None = None,
+        warnings: Sequence[Mapping[str, str]] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Build backend-ranked display attention without changing control policy."""
+
+        config = self.site_config if site_config is None else site_config
+        load_configs = (
+            [item for _, item in self._load_configs()]
+            if configs is None
+            else [dict(item) for item in configs]
+        )
+        current_warnings = (
+            self._current_warnings(overrides=overrides, site_config=config, configs=load_configs)
+            if warnings is None
+            else [dict(item) for item in warnings]
+        )
+        current_overrides = self._active_overrides() if overrides is None else overrides
+        load_names = {
+            str(item.get("load_id")): str(
+                item.get("display_name") or item.get("name") or item.get("load_id")
+            )
+            for item in load_configs
+            if item.get("load_id")
+        }
+        items: list[dict[str, Any]] = []
+        seen: set[str] = set()
+
+        def add(
+            *,
+            item_id: str,
+            code: str,
+            rank: int,
+            severity: str,
+            affected_kind: str,
+            affected_id: str | None = None,
+            display_name: str | None = None,
+            action: str | None = None,
+            reason_code: str | None = None,
+        ) -> None:
+            if item_id in seen:
+                return
+            seen.add(item_id)
+            item: dict[str, Any] = {
+                "id": item_id,
+                "code": code,
+                "rank": rank,
+                "severity": severity,
+                "affected_kind": affected_kind,
+                "reason_code": reason_code or code,
+            }
+            if affected_id is not None:
+                item["affected_id"] = affected_id
+            if display_name is not None:
+                item["display_name"] = display_name
+            if action is not None:
+                item["action"] = action
+            items.append(item)
+
+        for index, load_config in enumerate(load_configs):
+            display_name = str(
+                load_config.get("display_name")
+                or load_config.get("name")
+                or load_config.get("load_id")
+                or "Load"
+            )
+            load_id = load_config.get("load_id")
+            load_id_text = load_id if isinstance(load_id, str) else None
+            if load_config.get("invalid"):
+                add(
+                    item_id=(
+                        f"load:{load_id_text}:load_configuration_invalid"
+                        if load_id_text
+                        else f"load:invalid:{index}:load_configuration_invalid"
+                    ),
+                    code="load_configuration_invalid",
+                    rank=9,
+                    severity="warning",
+                    affected_kind="load",
+                    affected_id=load_id_text,
+                    display_name=display_name,
+                    action="settings",
+                )
+                continue
+            runtime_fault = self._load_runtime_fault(load_id_text)
+            if runtime_fault is not None:
+                add(
+                    item_id=f"load:{load_id_text}:{runtime_fault}",
+                    code=runtime_fault,
+                    rank=1,
+                    severity="critical",
+                    affected_kind="load",
+                    affected_id=load_id_text,
+                    display_name=display_name,
+                    action="load_detail",
+                    reason_code=runtime_fault,
+                )
+                continue
+            if load_id_text is None:
+                continue
+            if load_id_text in self._conflicting_actuator_load_ids:
+                continue
+            now = datetime.now(UTC)
+            progress = self._load_target_progress(load_config, load_id_text)
+            target_status = self._load_target_status(
+                load_config,
+                load_id_text,
+                progress,
+                now=now,
+            )
+            if target_status == "impossible":
+                add(
+                    item_id=f"load:{load_id_text}:target_impossible",
+                    code="target_impossible",
+                    rank=3,
+                    severity="critical",
+                    affected_kind="load",
+                    affected_id=load_id_text,
+                    display_name=display_name,
+                    action="load_detail",
+                    reason_code=self._load_primary_plan_reason(load_id_text, "deadline_impossible"),
+                )
+                continue
+            if target_status == "at_risk":
+                add(
+                    item_id=f"load:{load_id_text}:target_at_risk",
+                    code="target_at_risk",
+                    rank=4,
+                    severity="warning",
+                    affected_kind="load",
+                    affected_id=load_id_text,
+                    display_name=display_name,
+                    action="load_detail",
+                    reason_code=self._load_primary_plan_reason(load_id_text, "deadline_due"),
+                )
+                continue
+            deadline = self._load_deadline_datetime(load_config)
+            if (
+                target_status != "complete"
+                and deadline is not None
+                and now < deadline <= now + timedelta(hours=2)
+            ):
+                add(
+                    item_id=f"load:{load_id_text}:deadline_approaching",
+                    code="deadline_approaching",
+                    rank=8,
+                    severity="info",
+                    affected_kind="load",
+                    affected_id=load_id_text,
+                    display_name=display_name,
+                    action="load_detail",
+                    reason_code="deadline_due",
+                )
+
+        for load_id in sorted(self._conflicting_actuator_load_ids):
+            add(
+                item_id=f"load:{load_id}:duplicate_actuator_binding",
+                code="duplicate_actuator_binding",
+                rank=1,
+                severity="critical",
+                affected_kind="load",
+                affected_id=load_id,
+                display_name=load_names.get(load_id, load_id),
+                action="settings",
+            )
+
+        for load_id, override in sorted(current_overrides.items()):
+            indefinite = bool(override.get("indefinite"))
+            code = "manual_indefinite_override" if indefinite else "manual_timed_boost"
+            add(
+                item_id=f"load:{load_id}:{code}",
+                code=code,
+                rank=5 if indefinite else 7,
+                severity="warning" if indefinite else "info",
+                affected_kind="load",
+                affected_id=str(load_id),
+                display_name=load_names.get(str(load_id), str(load_id)),
+                action="load_detail",
+            )
+
+        for index, warning in enumerate(current_warnings):
+            code = str(warning.get("code") or "unknown_attention")
+            if code == "manual_indefinite_override":
+                continue
+            if code == "duplicate_actuator_binding":
+                if self._conflicting_actuator_load_ids:
+                    continue
+                add(
+                    item_id="site:duplicate_actuator_binding",
+                    code=code,
+                    rank=1,
+                    severity="critical",
+                    affected_kind="site",
+                    display_name=str(config.get("site_name", "site")),
+                    action="settings",
+                )
+            elif code == "input_missing":
+                add(
+                    item_id="site:input_missing",
+                    code=code,
+                    rank=6,
+                    severity="warning",
+                    affected_kind="site",
+                    display_name=str(config.get("site_name", "site")),
+                    action="diagnostics",
+                )
+            elif code == "configuration_invalid":
+                add(
+                    item_id="site:configuration_invalid",
+                    code=code,
+                    rank=9,
+                    severity="warning",
+                    affected_kind="site",
+                    display_name=str(config.get("site_name", "site")),
+                    action="settings",
+                )
+            else:
+                add(
+                    item_id=f"site:{code}:{index}",
+                    code=code,
+                    rank=10,
+                    severity="info",
+                    affected_kind="site",
+                    display_name=str(config.get("site_name", "site")),
+                    action="diagnostics",
+                )
+
+        return sorted(
+            items,
+            key=lambda item: (
+                int(item["rank"]),
+                str(item.get("affected_kind", "")),
+                str(item.get("affected_id", "")),
+                str(item["code"]),
+            ),
+        )
 
     def _record_decision(
         self, state: str, reason_code: str, message: str, *, load_id: str | None = None

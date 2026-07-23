@@ -112,6 +112,15 @@ async def test_site_list_is_available_to_an_authenticated_websocket_client(
         "last_replan_at": None,
     }
     assert {key: sites[0][key] for key in expected} == expected
+    assert isinstance(sites[0]["attention"], list)
+    assert sites[0]["attention_count"] == len(sites[0]["attention"])
+    for item in sites[0]["attention"]:
+        assert {"id", "code", "rank", "severity", "affected_kind", "reason_code", "action"} <= set(
+            item
+        )
+        assert isinstance(item["rank"], int)
+        assert item["severity"] in {"critical", "warning", "info"}
+        assert item["action"] in {"settings", "diagnostics", "load_detail"}
 
 
 async def test_websocket_rejects_unauthenticated_and_non_admin_requests(hass) -> None:

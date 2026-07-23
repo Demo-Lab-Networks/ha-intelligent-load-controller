@@ -73,3 +73,31 @@ export function formatDateTime(
     return new Intl.DateTimeFormat(localeFor(hass), options).format(parsed);
   }
 }
+
+export function formatTime(
+  hass: HomeAssistant | undefined,
+  value: string | undefined,
+): string {
+  if (!value) {
+    return "—";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  const options: Intl.DateTimeFormatOptions = {
+    timeStyle: "short",
+  };
+  const timeZone = timeZoneFor(hass);
+
+  try {
+    return new Intl.DateTimeFormat(localeFor(hass), {
+      ...options,
+      ...(timeZone === undefined ? {} : { timeZone }),
+    }).format(parsed);
+  } catch {
+    return new Intl.DateTimeFormat(localeFor(hass), options).format(parsed);
+  }
+}

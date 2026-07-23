@@ -42,6 +42,62 @@ describe("LoadControlApi", () => {
             active_loads: 1,
             waiting_loads: 0,
             total_controlled_power_w: 3400,
+            grid_import: { value: 500, unit: "W", quality: "measured" },
+            grid_export: { value: 0, unit: "W", quality: "measured" },
+            solar_production: { value: 2900, unit: "W", quality: "measured" },
+            phase_a_power: { value: 1200, unit: "W", quality: "measured" },
+            controlled_energy_today: { value: 4.2, unit: "kWh", quality: "derived" },
+            controlled_cost_today: { value: 1.25, currency: "AUD", unit: "kWh", quality: "derived" },
+            next_deadline: "2026-07-23T20:00:00Z",
+            attention_count: 2,
+            attention: [
+              {
+                id: "site:input_missing",
+                code: "input_missing",
+                rank: 6,
+                severity: "warning",
+                affected_kind: "site",
+                display_name: "Home",
+                action: "diagnostics",
+              },
+              {
+                id: "load:hws:actuator_unavailable",
+                code: "actuator_unavailable",
+                rank: 1,
+                severity: "critical",
+                affected_kind: "load",
+                affected_id: "hws",
+                display_name: "Hot water",
+                action: "load_detail",
+              },
+              {
+                id: "ignored",
+                code: "ignored",
+                rank: "not-a-number",
+                severity: "warning",
+              },
+            ],
+            presentation: {
+              status_level: "warning",
+              status_code: "watch",
+              summary_code: "attention",
+              summary_values: { count: 2, ignored: false },
+              flow_direction: "importing",
+              target_summary: {
+                total: 1,
+                complete: 0,
+                on_track: 0,
+                at_risk: 1,
+                impossible: 0,
+                unknown: 0,
+              },
+              decision_reason_code: "input_missing",
+              next_action_at: "2026-07-23T11:00:00Z",
+              next_action_kind: "start",
+              next_action_load_id: "hws",
+              next_action_display_name: "Hot water",
+              next_action_reason_code: "lowest_cost_window",
+            },
           };
         }
         return {
@@ -53,6 +109,14 @@ describe("LoadControlApi", () => {
               state: "idle",
               reason_code: "lowest_cost_window",
               automatic_control: true,
+              fault: true,
+              current_power_w: 1234.56,
+              progress: { current: 15, target: 30, unit: "min", percent: 50 },
+              target_status: "impossible",
+              deadline: "2026-07-23T20:00:00Z",
+              next_action_at: "2026-07-23T11:00:00Z",
+              next_action_kind: "start",
+              next_action_reason_code: "lowest_cost_window",
             },
           ],
         };
@@ -61,8 +125,75 @@ describe("LoadControlApi", () => {
 
     await expect(api.getSites()).resolves.toMatchObject([{ entry_id: "entry-home" }]);
     await expect(api.getDashboard("entry-home")).resolves.toMatchObject({
-      site: { site_id: "home", controller_state: "idle", active_load_count: 1 },
-      loads: [{ load_id: "hws", load_type: "hot_water", controller_state: "idle" }],
+      site: {
+        site_id: "home",
+        controller_state: "idle",
+        active_load_count: 1,
+        grid_import: { value: 500, unit: "W", quality: "measured" },
+        solar_production: { value: 2900, unit: "W", quality: "measured" },
+        phase_a_power: { value: 1200, unit: "W", quality: "measured" },
+        controlled_energy_today: { value: 4.2, unit: "kWh", quality: "derived" },
+        controlled_cost_today: { value: 1.25, currency: "AUD", unit: "kWh", quality: "derived" },
+        next_deadline: "2026-07-23T20:00:00Z",
+        attention_count: 2,
+        attention: [
+          {
+            id: "load:hws:actuator_unavailable",
+            code: "actuator_unavailable",
+            rank: 1,
+            severity: "critical",
+            affected_kind: "load",
+            affected_id: "hws",
+            display_name: "Hot water",
+            action: "load_detail",
+          },
+          {
+            id: "site:input_missing",
+            code: "input_missing",
+            rank: 6,
+            severity: "warning",
+            affected_kind: "site",
+            display_name: "Home",
+            action: "diagnostics",
+          },
+        ],
+        presentation: {
+          status_level: "warning",
+          status_code: "watch",
+          summary_code: "attention",
+          summary_values: { count: 2 },
+          flow_direction: "importing",
+          target_summary: {
+            total: 1,
+            complete: 0,
+            onTrack: 0,
+            atRisk: 1,
+            impossible: 0,
+            unknown: 0,
+          },
+          decision_reason_code: "input_missing",
+          next_action_at: "2026-07-23T11:00:00Z",
+          next_action_kind: "start",
+          next_action_load_id: "hws",
+          next_action_display_name: "Hot water",
+          next_action_reason_code: "lowest_cost_window",
+        },
+      },
+      loads: [
+        {
+          load_id: "hws",
+          load_type: "hot_water",
+          controller_state: "idle",
+          fault: true,
+          current_power: { value: 1234.56, unit: "W" },
+          progress: { current: 15, target: 30, unit: "min", percent: 50 },
+          target_status: "impossible",
+          deadline: "2026-07-23T20:00:00Z",
+          next_action_at: "2026-07-23T11:00:00Z",
+          next_action_kind: "start",
+          next_action_reason_code: "lowest_cost_window",
+        },
+      ],
     });
     expect(calls).toEqual(
       expect.arrayContaining([
@@ -100,6 +231,25 @@ describe("LoadControlApi", () => {
         if (message["type"] === "intelligent_load_controller/v1/current_plan") {
           return null;
         }
+        if (message["type"] === "intelligent_load_controller/v1/daily_timeline") {
+          return {
+            generated_at: "2026-07-23T00:00:00Z",
+            intervals: [
+              {
+                load_id: "hws",
+                start_at: "2026-07-23T01:00:00Z",
+                end_at: "2026-07-23T02:00:00Z",
+                power_w: 2400,
+                reason_code: "solar_export_qualified",
+              },
+              {
+                load_id: "ignored",
+                start_at: "2026-07-23T01:00:00Z",
+                power_w: "not-a-number",
+              },
+            ],
+          };
+        }
         return {};
       }),
     );
@@ -110,7 +260,20 @@ describe("LoadControlApi", () => {
     await api.deleteLoad("entry-home", "load-1", 8);
     await api.startOverride("entry-home", "load-1", "on", { duration_seconds: 1_800 });
     await api.setAutomaticControl("entry-home", "load-1", false, 8);
+    await api.getDiagnostics("entry-home");
     await expect(api.getCurrentPlan("entry-home")).resolves.toBeNull();
+    await expect(api.getDailyTimeline("entry-home")).resolves.toEqual({
+      generated_at: "2026-07-23T00:00:00Z",
+      intervals: [
+        {
+          load_id: "hws",
+          start_at: "2026-07-23T01:00:00Z",
+          end_at: "2026-07-23T02:00:00Z",
+          power_w: 2400,
+          reason_code: "solar_export_qualified",
+        },
+      ],
+    });
 
     expect(calls).toEqual(
       expect.arrayContaining([
@@ -154,7 +317,15 @@ describe("LoadControlApi", () => {
           if_revision: 8,
         },
         {
+          type: "intelligent_load_controller/v1/diagnostics",
+          entry_id: "entry-home",
+        },
+        {
           type: "intelligent_load_controller/v1/current_plan",
+          entry_id: "entry-home",
+        },
+        {
+          type: "intelligent_load_controller/v1/daily_timeline",
           entry_id: "entry-home",
         },
       ]),

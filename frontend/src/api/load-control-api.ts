@@ -1,10 +1,13 @@
 import type {
+  AttentionSeverity,
   DashboardData,
   JsonObject,
   JsonValue,
   LoadProgress,
   LoadSummary,
   Measurement,
+  SiteAttentionItem,
+  SitePresentation,
   SiteSummary,
 } from "../models/dashboard";
 import type { HomeAssistant, HomeAssistantUnsubscribe } from "../types/home-assistant";
@@ -158,10 +161,23 @@ export interface SiteSummaryResponse {
   waiting_load_count?: number;
   total_controlled_power_w?: number;
   controlled_power?: Measurement;
+  grid_import?: Measurement;
+  grid_export?: Measurement;
+  solar_production?: Measurement;
+  phase_a_power?: Measurement;
+  phase_b_power?: Measurement;
+  phase_c_power?: Measurement;
+  current_import_price?: SiteSummary["current_import_price"];
+  controlled_energy_today?: Measurement;
+  controlled_cost_today?: SiteSummary["controlled_cost_today"];
+  next_deadline?: string;
   health?: SiteSummary["health"];
   updated_at?: string;
   last_replan_at?: string;
   warnings?: readonly unknown[];
+  attention_count?: number;
+  attention?: readonly unknown[];
+  presentation?: unknown;
 }
 
 export interface LoadListItemResponse {
@@ -176,6 +192,8 @@ export interface LoadListItemResponse {
   automatic_control?: boolean;
   optimisation_mode?: string;
   priority?: number;
+  area?: string;
+  area_name?: string;
   override?: unknown;
   manual_override?: LoadSummary["manual_override"];
   current_power?: Measurement;
@@ -183,6 +201,9 @@ export interface LoadListItemResponse {
   progress?: LoadProgress;
   deadline?: string;
   next_action?: string;
+  next_action_at?: string;
+  next_action_kind?: string;
+  next_action_reason_code?: string;
   target_status?: LoadSummary["target_status"];
   fault?: boolean;
 }
@@ -400,8 +421,9 @@ export class LoadControlApi {
     return this.request("current_plan", { entry_id: entryId });
   }
 
-  public getDailyTimeline(entryId: string): Promise<DailyTimelineResponse> {
-    return this.request("daily_timeline", { entry_id: entryId });
+  public async getDailyTimeline(entryId: string): Promise<DailyTimelineResponse> {
+    const response = await this.request("daily_timeline", { entry_id: entryId });
+    return normalizeDailyTimeline(response);
   }
 
   public getHistoricalSummary(entryId: string): Promise<HistoricalSummaryResponse> {
@@ -420,6 +442,10 @@ export class LoadControlApi {
       entry_id: entryId,
       ...(loadId === undefined ? {} : { load_id: loadId }),
     });
+  }
+
+  public getDiagnostics(entryId: string): Promise<JsonObject> {
+    return this.request("diagnostics", { entry_id: entryId });
   }
 
   /** Subscribe only to one site; event payloads are refreshed through reads. */
@@ -450,12 +476,25 @@ function normalizeSiteSummary(response: SiteSummaryResponse): SiteSummary {
     site_id: response.site_id ?? response.entry_id ?? "site",
     name: response.name ?? "Load Control",
     controller_state: response.controller_state ?? response.state ?? "initialising",
+    grid_import: response.grid_import,
+    grid_export: response.grid_export,
+    solar_production: response.solar_production,
+    phase_a_power: response.phase_a_power,
+    phase_b_power: response.phase_b_power,
+    phase_c_power: response.phase_c_power,
     controlled_power:
       response.controlled_power ?? measurementFromWatts(response.total_controlled_power_w),
     active_load_count: response.active_load_count ?? response.active_loads ?? 0,
     waiting_load_count: response.waiting_load_count ?? response.waiting_loads ?? 0,
+    current_import_price: response.current_import_price,
+    controlled_energy_today: response.controlled_energy_today,
+    controlled_cost_today: response.controlled_cost_today,
+    next_deadline: response.next_deadline,
     health,
     updated_at: response.updated_at ?? response.last_replan_at,
+    attention_count: response.attention_count,
+    attention: normalizeAttentionItems(response.attention),
+    presentation: normalizeSitePresentation(response.presentation),
   };
 }
 
@@ -471,18 +510,205 @@ function normalizeLoadSummary(response: LoadListItemResponse): LoadSummary {
     automatic_control: response.automatic_control ?? false,
     optimisation_mode: response.optimisation_mode,
     priority: response.priority,
+    area: response.area_name ?? response.area,
     manual_override: response.manual_override ?? overrideMode(response.override),
     current_power: response.current_power ?? measurementFromWatts(response.current_power_w),
     progress: response.progress,
     deadline: response.deadline,
     next_action: response.next_action,
+    next_action_at: response.next_action_at,
+    next_action_kind: nextActionKind(response.next_action_kind),
+    next_action_reason_code: response.next_action_reason_code,
     target_status: response.target_status,
     fault: response.fault ?? state === "fault",
   };
 }
 
+function normalizeSitePresentation(value: unknown): SitePresentation | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const candidate = value as Record<string, unknown>;
+  const result: SitePresentation = {};
+  const level = sitePresentationLevel(candidate["status_level"]);
+  if (level !== undefined) {
+    result.status_level = level;
+  }
+  for (const key of [
+    "status_code",
+    "summary_code",
+    "decision_reason_code",
+    "next_action_at",
+    "next_action_load_id",
+    "next_action_display_name",
+    "next_action_reason_code",
+  ] as const) {
+    const raw = candidate[key];
+    if (typeof raw === "string") {
+      result[key] = raw;
+    }
+  }
+  const flowDirection = siteFlowDirection(candidate["flow_direction"]);
+  if (flowDirection !== undefined) {
+    result.flow_direction = flowDirection;
+  }
+  const summaryValues = stringNumberRecord(candidate["summary_values"]);
+  if (summaryValues !== undefined) {
+    result.summary_values = summaryValues;
+  }
+  const targetSummary = siteTargetSummary(candidate["target_summary"]);
+  if (targetSummary !== undefined) {
+    result.target_summary = targetSummary;
+  }
+  const nextKind = nextActionKind(candidate["next_action_kind"]);
+  if (nextKind !== undefined) {
+    result.next_action_kind = nextKind;
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function normalizeDailyTimeline(response: DailyTimelineResponse): DailyTimelineResponse {
+  return {
+    generated_at: typeof response.generated_at === "string" ? response.generated_at : null,
+    intervals: normalizePlanIntervals(response.intervals),
+  };
+}
+
+function normalizePlanIntervals(value: readonly PlanIntervalResponse[] | undefined): readonly PlanIntervalResponse[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const intervals: PlanIntervalResponse[] = [];
+  for (const raw of value) {
+    if (typeof raw !== "object" || raw === null) {
+      continue;
+    }
+    const candidate = raw as Record<string, unknown>;
+    const startAt = candidate["start_at"];
+    const endAt = candidate["end_at"];
+    if (typeof startAt !== "string" || typeof endAt !== "string") {
+      continue;
+    }
+    const loadId = candidate["load_id"];
+    const powerW = candidate["power_w"];
+    const solarAllocatedW = candidate["solar_allocated_w"];
+    const expectedCost = candidate["expected_cost"];
+    const reasonCode = candidate["reason_code"];
+    intervals.push({
+      start_at: startAt,
+      end_at: endAt,
+      ...(typeof loadId === "string" ? { load_id: loadId } : {}),
+      ...(isFiniteNumber(powerW) ? { power_w: powerW } : {}),
+      ...(isFiniteNumber(solarAllocatedW) ? { solar_allocated_w: solarAllocatedW } : {}),
+      ...(typeof expectedCost === "string" ? { expected_cost: expectedCost } : {}),
+      ...(typeof reasonCode === "string" ? { reason_code: reasonCode } : {}),
+    });
+  }
+  return intervals.sort((left, right) => {
+    const leftStart = Date.parse(left.start_at ?? "");
+    const rightStart = Date.parse(right.start_at ?? "");
+    if (Number.isNaN(leftStart) || Number.isNaN(rightStart)) {
+      return String(left.start_at).localeCompare(String(right.start_at));
+    }
+    return leftStart - rightStart;
+  });
+}
+
 function measurementFromWatts(value: number | undefined): Measurement | undefined {
   return value === undefined ? undefined : { value, unit: "W" };
+}
+
+function normalizeAttentionItems(value: readonly unknown[] | undefined): readonly SiteAttentionItem[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const items: SiteAttentionItem[] = [];
+  for (const raw of value) {
+    if (typeof raw !== "object" || raw === null) {
+      continue;
+    }
+    const candidate = raw as Record<string, unknown>;
+    const id = candidate["id"];
+    const code = candidate["code"];
+    const rank = candidate["rank"];
+    const severity = candidate["severity"];
+    if (typeof id !== "string" || typeof code !== "string" || !isFiniteNumber(rank) || !isAttentionSeverity(severity)) {
+      continue;
+    }
+    const affectedKind = candidate["affected_kind"];
+    const affectedId = candidate["affected_id"];
+    const displayName = candidate["display_name"];
+    const action = candidate["action"];
+    const reasonCode = candidate["reason_code"];
+    items.push({
+      id,
+      code,
+      rank,
+      severity,
+      ...(typeof reasonCode === "string" ? { reason_code: reasonCode } : {}),
+      ...(affectedKind === "site" || affectedKind === "load" ? { affected_kind: affectedKind } : {}),
+      ...(typeof affectedId === "string" ? { affected_id: affectedId } : {}),
+      ...(typeof displayName === "string" ? { display_name: displayName } : {}),
+      ...(typeof action === "string" ? { action } : {}),
+    });
+  }
+  return items.sort((left, right) => left.rank - right.rank || left.id.localeCompare(right.id));
+}
+
+function sitePresentationLevel(value: unknown): SitePresentation["status_level"] | undefined {
+  return value === "ok" || value === "info" || value === "warning" || value === "critical" || value === "unknown"
+    ? value
+    : undefined;
+}
+
+function siteFlowDirection(value: unknown): SitePresentation["flow_direction"] | undefined {
+  return value === "exporting" || value === "importing" || value === "balanced" || value === "unknown"
+    ? value
+    : undefined;
+}
+
+function stringNumberRecord(value: unknown): Readonly<Record<string, string | number>> | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const result: Record<string, string | number> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (typeof raw === "string" || isFiniteNumber(raw)) {
+      result[key] = raw;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function siteTargetSummary(value: unknown): SitePresentation["target_summary"] | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const candidate = value as Record<string, unknown>;
+  return {
+    total: nonNegativeCount(candidate["total"]),
+    complete: nonNegativeCount(candidate["complete"]),
+    onTrack: nonNegativeCount(candidate["on_track"] ?? candidate["onTrack"]),
+    atRisk: nonNegativeCount(candidate["at_risk"] ?? candidate["atRisk"]),
+    impossible: nonNegativeCount(candidate["impossible"]),
+    unknown: nonNegativeCount(candidate["unknown"]),
+  };
+}
+
+function nonNegativeCount(value: unknown): number {
+  return isFiniteNumber(value) ? Math.max(0, Math.trunc(value)) : 0;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isAttentionSeverity(value: unknown): value is AttentionSeverity {
+  return value === "critical" || value === "warning" || value === "info";
+}
+
+function nextActionKind(value: unknown): LoadSummary["next_action_kind"] | undefined {
+  return value === "start" || value === "stop" ? value : undefined;
 }
 
 function overrideMode(value: unknown): LoadSummary["manual_override"] | undefined {

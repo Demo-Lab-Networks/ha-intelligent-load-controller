@@ -1,6 +1,7 @@
 # Frontend styles directory
 
-Phase 1 will move shared CSS primitives here: surfaces, layout, buttons, status pills, alerts, skeletons, responsive navigation, and chart/timeline legends.
+Phase 1 starts shared style extraction here.
 
-Phase 0 keeps this as a source-owned placeholder to reserve the intended architecture without changing production panel behaviour.
-
+- `panel.ts` contains the current legacy panel CSS plus Phase 1 shell/navigation refinements.
+- Continue moving reusable primitives out of the root panel and into page/component-specific style modules as pages are extracted.
+- Keep styles theme-aware through Home Assistant variables and `frontend/src/design/tokens.ts`.

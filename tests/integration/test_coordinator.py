@@ -16,7 +16,7 @@ pytest.importorskip(
 
 from homeassistant.config_entries import ConfigSubentry
 
-from custom_components.intelligent_load_controller.adapters import NullAdapter
+from custom_components.intelligent_load_controller.adapters import AdapterFeedback, NullAdapter
 from custom_components.intelligent_load_controller.const import LOAD_SUBENTRY_TYPE
 from custom_components.intelligent_load_controller.coordinator import (
     ConfigConflictError,
@@ -113,6 +113,335 @@ async def test_coordinator_preserves_revision_and_manual_override_semantics(
         assert preview["plan"]["preview_only"] is True
 
     service_call.assert_not_awaited()
+
+
+async def test_site_summary_exposes_backend_ranked_attention_items(
+    hass,
+    load_control_config_entry,
+    load_config,
+    runtime_store,
+) -> None:
+    """Overview attention severity and ordering are backend-owned fields."""
+
+    coordinator = SiteCoordinator(hass, load_control_config_entry, runtime_store)
+    await coordinator.async_start()
+    first = await coordinator.async_add_load(dict(load_config))
+    second_config = dict(load_config)
+    second_config["display_name"] = "Second load"
+    second = await coordinator.async_add_load(second_config)
+    fault_config = dict(load_config)
+    fault_config["display_name"] = "Faulted load"
+    faulted = await coordinator.async_add_load(fault_config)
+    runtime_by_load = coordinator._recovery.setdefault(  # noqa: SLF001
+        "load_runtime",
+        {},
+    )
+    runtime_by_load.setdefault(faulted["load_id"], {})["fault_state"] = "actuator_unavailable"
+    hass.config_entries.async_add_subentry(
+        load_control_config_entry,
+        ConfigSubentry(
+            data=MappingProxyType({"display_name": "", "load_type": "not_supported"}),
+            subentry_type=LOAD_SUBENTRY_TYPE,
+            title="Broken load",
+            unique_id="broken-load",
+        ),
+    )
+
+    await coordinator.async_start_override(first["load_id"], "on", indefinite=True)
+    await coordinator.async_start_override(second["load_id"], "off", duration=timedelta(minutes=30))
+
+    summary = await coordinator.async_site_summary()
+    attention = summary["attention"]
+
+    assert summary["attention_count"] == len(attention)
+    assert attention == sorted(attention, key=lambda item: item["rank"])
+    assert {
+        item["code"]: {
+            "rank": item["rank"],
+            "severity": item["severity"],
+            "affected_kind": item["affected_kind"],
+            "affected_id": item.get("affected_id"),
+            "action": item.get("action"),
+        }
+        for item in attention
+        if item["code"]
+        in {
+            "actuator_unavailable",
+            "load_configuration_invalid",
+            "manual_indefinite_override",
+            "manual_timed_boost",
+        }
+    } == {
+        "actuator_unavailable": {
+            "rank": 1,
+            "severity": "critical",
+            "affected_kind": "load",
+            "affected_id": faulted["load_id"],
+            "action": "load_detail",
+        },
+        "load_configuration_invalid": {
+            "rank": 9,
+            "severity": "warning",
+            "affected_kind": "load",
+            "affected_id": None,
+            "action": "settings",
+        },
+        "manual_indefinite_override": {
+            "rank": 5,
+            "severity": "warning",
+            "affected_kind": "load",
+            "affected_id": first["load_id"],
+            "action": "load_detail",
+        },
+        "manual_timed_boost": {
+            "rank": 7,
+            "severity": "info",
+            "affected_kind": "load",
+            "affected_id": second["load_id"],
+            "action": "load_detail",
+        },
+    }
+    listed = await coordinator.async_load_list()
+    assert any(item["load_id"] == faulted["load_id"] and item["fault"] is True for item in listed)
+    assert any(
+        item["name"] == "Broken load"
+        and item["state"] == "fault"
+        and item["reason_code"] == "load_configuration_invalid"
+        and item["fault"] is True
+        for item in listed
+    )
+
+
+async def test_site_summary_attention_includes_backend_target_and_deadline_items(
+    hass,
+    load_control_config_entry,
+    load_config,
+    runtime_store,
+) -> None:
+    """Target risk/deadline attention is ranked by backend plan evidence."""
+
+    coordinator = SiteCoordinator(hass, load_control_config_entry, runtime_store)
+    await coordinator.async_start()
+    now = datetime.now(UTC)
+
+    impossible_config = dict(load_config)
+    impossible_config["display_name"] = "Impossible target"
+    impossible_config["requirements"] = {
+        "minimum_runtime_s": 1800,
+        "deadline_at": (now + timedelta(hours=1)).isoformat(),
+    }
+    impossible = await coordinator.async_add_load(impossible_config)
+
+    risk_config = dict(load_config)
+    risk_config["display_name"] = "At risk target"
+    risk_config["requirements"] = {"minimum_runtime_s": 1800}
+    at_risk = await coordinator.async_add_load(risk_config)
+
+    deadline_config = dict(load_config)
+    deadline_config["display_name"] = "Soon target"
+    deadline_config["requirements"] = {
+        "minimum_runtime_s": 900,
+        "deadline_at": (now + timedelta(minutes=90)).isoformat(),
+    }
+    soon = await coordinator.async_add_load(deadline_config)
+
+    coordinator._last_plan = {  # noqa: SLF001
+        "intervals": [],
+        "loads": [
+            {
+                "load_id": impossible["load_id"],
+                "required_slots": 6,
+                "scheduled_slots": 2,
+                "unmet_slots": 4,
+                "reason_codes": ["deadline_impossible"],
+            },
+            {
+                "load_id": at_risk["load_id"],
+                "required_slots": 6,
+                "scheduled_slots": 3,
+                "unmet_slots": 3,
+                "reason_codes": ["plan_not_selected"],
+            },
+            {
+                "load_id": soon["load_id"],
+                "required_slots": 3,
+                "scheduled_slots": 3,
+                "unmet_slots": 0,
+                "reason_codes": ["plan_selected"],
+            },
+        ],
+    }
+
+    summary = await coordinator.async_site_summary()
+    attention = summary["attention"]
+
+    assert {
+        item["code"]: {
+            "rank": item["rank"],
+            "severity": item["severity"],
+            "affected_id": item.get("affected_id"),
+            "action": item.get("action"),
+            "reason_code": item.get("reason_code"),
+        }
+        for item in attention
+        if item["code"] in {"target_impossible", "target_at_risk", "deadline_approaching"}
+    } == {
+        "target_impossible": {
+            "rank": 3,
+            "severity": "critical",
+            "affected_id": impossible["load_id"],
+            "action": "load_detail",
+            "reason_code": "deadline_impossible",
+        },
+        "target_at_risk": {
+            "rank": 4,
+            "severity": "warning",
+            "affected_id": at_risk["load_id"],
+            "action": "load_detail",
+            "reason_code": "plan_not_selected",
+        },
+        "deadline_approaching": {
+            "rank": 8,
+            "severity": "info",
+            "affected_id": soon["load_id"],
+            "action": "load_detail",
+            "reason_code": "deadline_due",
+        },
+    }
+    assert attention == sorted(attention, key=lambda item: item["rank"])
+
+
+async def test_site_summary_exposes_backend_home_status_presentation(
+    hass,
+    load_control_config_entry,
+    load_config,
+    runtime_store,
+) -> None:
+    """Home Status receives backend-owned status, target and next-action metadata."""
+
+    coordinator = SiteCoordinator(hass, load_control_config_entry, runtime_store)
+    await coordinator.async_start()
+    now = datetime.now(UTC)
+    scheduled_at = now + timedelta(hours=1)
+
+    config = dict(load_config)
+    config["display_name"] = "Hot water"
+    config["requirements"] = {
+        "minimum_runtime_s": 1800,
+        "deadline_at": (now + timedelta(hours=6)).isoformat(),
+    }
+    created = await coordinator.async_add_load(config)
+    load_id = created["load_id"]
+    coordinator._last_plan = {  # noqa: SLF001
+        "intervals": [
+            {
+                "load_id": load_id,
+                "start_at": scheduled_at.isoformat(),
+                "end_at": (scheduled_at + timedelta(minutes=30)).isoformat(),
+                "reason_code": "lowest_cost_window",
+            }
+        ],
+        "loads": [
+            {
+                "load_id": load_id,
+                "required_slots": 6,
+                "scheduled_slots": 6,
+                "unmet_slots": 0,
+                "reason_codes": ["plan_selected"],
+            }
+        ],
+    }
+
+    summary = await coordinator.async_site_summary()
+    presentation = summary["presentation"]
+
+    assert presentation["status_level"] == "warning"
+    assert presentation["status_code"] == "watch"
+    assert presentation["summary_code"] == "attention"
+    assert presentation["summary_values"] == {"count": summary["attention_count"]}
+    assert presentation["flow_direction"] == "unknown"
+    assert presentation["target_summary"] == {
+        "total": 1,
+        "complete": 0,
+        "on_track": 1,
+        "at_risk": 0,
+        "impossible": 0,
+        "unknown": 0,
+    }
+    assert presentation["decision_reason_code"] == "input_missing"
+    assert presentation["next_action_at"] == scheduled_at.isoformat()
+    assert presentation["next_action_kind"] == "start"
+    assert presentation["next_action_load_id"] == load_id
+    assert presentation["next_action_display_name"] == "Hot water"
+    assert presentation["next_action_reason_code"] == "lowest_cost_window"
+    assert "grid_import" not in summary
+    assert "grid_export" not in summary
+
+
+async def test_load_list_exposes_backend_card_presentation_fields(
+    hass,
+    load_control_config_entry,
+    load_config,
+    runtime_store,
+) -> None:
+    """Load cards receive backend-owned measured power, deadlines and plan actions."""
+
+    deadline_at = datetime.now(UTC) + timedelta(hours=4)
+    scheduled_at = datetime.now(UTC) + timedelta(hours=1)
+    config = dict(load_config)
+    config["requirements"] = {
+        "combination": "all_of",
+        "minimum_runtime_s": 1800,
+        "deadline_at": deadline_at.isoformat(),
+    }
+    coordinator = SiteCoordinator(hass, load_control_config_entry, runtime_store)
+    await coordinator.async_start()
+    created = await coordinator.async_add_load(config)
+    load_id = created["load_id"]
+    coordinator._feedback[load_id] = AdapterFeedback(  # noqa: SLF001
+        observed_at=datetime.now(UTC),
+        available=True,
+        confirmed_state=True,
+        active_power_w=1234.5678,
+    )
+    coordinator._recovery.setdefault("load_runtime", {}).setdefault(load_id, {})[  # noqa: SLF001
+        "confirmed_runtime_today_h"
+    ] = 0.25
+    coordinator._last_plan = {  # noqa: SLF001
+        "intervals": [
+            {
+                "load_id": load_id,
+                "start_at": scheduled_at.isoformat(),
+                "end_at": (scheduled_at + timedelta(minutes=30)).isoformat(),
+                "reason_code": "lowest_cost_window",
+            }
+        ],
+        "loads": [
+            {
+                "load_id": load_id,
+                "required_slots": 6,
+                "scheduled_slots": 3,
+                "unmet_slots": 3,
+                "reason_codes": ["deadline_impossible"],
+            }
+        ],
+    }
+
+    listed = await coordinator.async_load_list()
+    load_summary = next(item for item in listed if item["load_id"] == load_id)
+
+    assert load_summary["current_power_w"] == 1234.568
+    assert load_summary["deadline"] == created["requirements"]["deadline_at"]
+    assert load_summary["next_action_at"] == scheduled_at.isoformat()
+    assert load_summary["next_action_kind"] == "start"
+    assert load_summary["next_action_reason_code"] == "lowest_cost_window"
+    assert load_summary["progress"] == {
+        "current": 15.0,
+        "target": 30.0,
+        "unit": "min",
+        "percent": 50.0,
+    }
+    assert load_summary["target_status"] == "impossible"
 
 
 async def test_site_rejects_duplicate_actuator_bindings_in_writes_and_previews(

@@ -24,8 +24,19 @@ async function waitForRender(): Promise<void> {
   });
 }
 
+function shellMain(panel: IntelligentLoadControllerPanel): HTMLElement | null {
+  return panel.shadowRoot
+    ?.querySelector("ilc-app-shell")
+    ?.shadowRoot?.querySelector("main") ?? null;
+}
+
+function shellText(panel: IntelligentLoadControllerPanel): string {
+  return panel.shadowRoot?.querySelector("ilc-app-shell")?.shadowRoot?.textContent ?? "";
+}
+
 afterEach(() => {
   document.body.replaceChildren();
+  window.history.replaceState({}, "", "/");
 });
 
 describe("intelligent-load-controller-panel", () => {
@@ -65,7 +76,329 @@ describe("intelligent-load-controller-panel", () => {
     await waitForRender();
 
     expect(panel.shadowRoot?.textContent).toContain("No controlled loads have been configured yet.");
-    expect(panel.shadowRoot?.querySelector("main")?.getAttribute("aria-busy")).toBe("false");
+    expect(shellMain(panel)?.getAttribute("aria-busy")).toBe("false");
+  });
+
+  it("renders the redesigned overview hierarchy from backend summary fields", async () => {
+    const calls: Record<string, unknown>[] = [];
+    const panel = document.createElement(
+      "intelligent-load-controller-panel",
+    ) as IntelligentLoadControllerPanel;
+    panel.hass = createHass((message) => {
+      calls.push(message);
+      switch (message["type"]) {
+        case "intelligent_load_controller/v1/site_list":
+          return { sites: [{ entry_id: "entry-home", site_id: "home", name: "Home" }] };
+        case "intelligent_load_controller/v1/site_summary":
+          return {
+            entry_id: "entry-home",
+            site_id: "home",
+            name: "Home",
+            state: "idle",
+            active_loads: 1,
+            waiting_loads: 2,
+            health: "warning",
+            grid_import: { value: 0, unit: "W", quality: "measured" },
+            grid_export: { value: 950, unit: "W", quality: "measured" },
+            solar_production: { value: 3400, unit: "W", quality: "measured" },
+            controlled_power: { value: 2400, unit: "W", quality: "measured" },
+            controlled_energy_today: { value: 4.2, unit: "kWh", quality: "derived" },
+            controlled_cost_today: { value: 1.15, currency: "AUD", unit: "kWh", quality: "derived" },
+            next_deadline: "2026-07-23T20:00:00Z",
+            updated_at: "2026-07-23T02:00:00Z",
+          };
+        case "intelligent_load_controller/v1/load_list":
+          return {
+            loads: [
+              {
+                load_id: "hot-water",
+                name: "Hot water",
+                type: "hot_water",
+                state: "solar_run",
+                reason_code: "solar_export_qualified",
+                automatic_control: true,
+                current_power: { value: 2400, unit: "W", quality: "measured" },
+                target_status: "on_track",
+              },
+              {
+                load_id: "ev",
+                name: "EV charger",
+                type: "ev_charger",
+                state: "waiting_for_window",
+                reason_code: "deadline_catchup",
+                automatic_control: true,
+                target_status: "at_risk",
+              },
+              {
+                load_id: "pool",
+                name: "Pool pump",
+                type: "generic_binary",
+                state: "waiting_for_window",
+                reason_code: "lowest_cost_window",
+                automatic_control: true,
+                next_action: "Start during free period",
+              },
+            ],
+          };
+        case "intelligent_load_controller/v1/daily_timeline":
+          return {
+            generated_at: "2026-07-23T00:00:00Z",
+            intervals: [
+              {
+                load_id: "hot-water",
+                start_at: "2026-07-23T00:00:00Z",
+                end_at: "2026-07-23T01:00:00Z",
+                power_w: 2400,
+                reason_code: "solar_export_qualified",
+              },
+              {
+                load_id: "pool",
+                start_at: "2026-07-23T03:00:00Z",
+                end_at: "2026-07-23T04:00:00Z",
+                power_w: 800,
+                reason_code: "free_period_run",
+              },
+            ],
+          };
+        case "intelligent_load_controller/v1/current_plan":
+          return null;
+        default:
+          return {};
+      }
+    });
+    document.body.append(panel);
+
+    await vi.waitFor(() => {
+      expect(panel.shadowRoot?.textContent).toContain("Home Status");
+      expect(panel.shadowRoot?.textContent).toContain("Watch closely");
+      expect(panel.shadowRoot?.textContent).toContain("Live energy flow");
+      expect(panel.shadowRoot?.textContent).toContain("Exporting 950 W to the grid.");
+      expect(panel.shadowRoot?.textContent).toContain("Attention and opportunities");
+      expect(panel.shadowRoot?.textContent).toContain("EV charger target at risk");
+      expect(panel.shadowRoot?.textContent).toContain("Today summary");
+      expect(panel.shadowRoot?.textContent).toContain("Today timeline");
+      expect(panel.shadowRoot?.textContent).toContain("2 planned interval(s)");
+      expect(panel.shadowRoot?.textContent).toContain("Hot water");
+      expect(panel.shadowRoot?.textContent).toContain("Heating now under controller supervision.");
+      expect(panel.shadowRoot?.textContent).toContain("Automatic on");
+      expect(panel.shadowRoot?.textContent).toContain("Review target");
+      expect(panel.shadowRoot?.textContent).toContain("Running now");
+      expect(panel.shadowRoot?.textContent).toContain("Starting soon");
+    });
+
+    const openPlan = Array.from(panel.shadowRoot?.querySelectorAll("button") ?? []).find(
+      (button) => button.textContent?.trim() === "Open Plan",
+    ) as HTMLButtonElement;
+    openPlan.click();
+    await vi.waitFor(() => {
+      expect(window.location.pathname).toBe("/intelligent-load-controller/plan");
+      expect(calls).toContainEqual({
+        type: "intelligent_load_controller/v1/current_plan",
+        entry_id: "entry-home",
+      });
+    });
+  });
+
+  it("opens backend-provided attention destinations from the overview", async () => {
+    const calls: Record<string, unknown>[] = [];
+    const panel = document.createElement(
+      "intelligent-load-controller-panel",
+    ) as IntelligentLoadControllerPanel;
+    panel.hass = createHass((message) => {
+      calls.push(message);
+      switch (message["type"]) {
+        case "intelligent_load_controller/v1/site_list":
+          return { sites: [{ entry_id: "entry-home", site_id: "home", name: "Home" }] };
+        case "intelligent_load_controller/v1/site_summary":
+          return {
+            entry_id: "entry-home",
+            site_id: "home",
+            name: "Home",
+            state: "idle",
+            active_loads: 0,
+            waiting_loads: 0,
+            attention: [
+              {
+                id: "site:configuration_invalid",
+                code: "configuration_invalid",
+                rank: 9,
+                severity: "warning",
+                affected_kind: "site",
+                display_name: "Home",
+                action: "settings",
+              },
+            ],
+          };
+        case "intelligent_load_controller/v1/load_list":
+          return { loads: [] };
+        case "intelligent_load_controller/v1/configuration_read":
+          return {
+            site: {
+              site_name: "Home",
+              grid_sign_convention: "import_positive",
+              config_revision: 1,
+            },
+            loads: [],
+            schema: {},
+          };
+        default:
+          return {};
+      }
+    });
+    document.body.append(panel);
+
+    await vi.waitFor(() => {
+      expect(panel.shadowRoot?.textContent).toContain("Configuration needs attention");
+    });
+    const settingsButton = Array.from(panel.shadowRoot?.querySelectorAll("button") ?? []).find(
+      (button) => button.textContent?.trim() === "Open settings",
+    ) as HTMLButtonElement;
+    settingsButton.click();
+
+    await vi.waitFor(() => {
+      expect(window.location.pathname).toBe("/intelligent-load-controller/settings");
+      expect(calls).toContainEqual({
+        type: "intelligent_load_controller/v1/configuration_read",
+        entry_id: "entry-home",
+      });
+    });
+  });
+
+  it("filters, sorts, and groups the dedicated load catalogue without websocket writes", async () => {
+    const calls: Record<string, unknown>[] = [];
+    const panel = document.createElement(
+      "intelligent-load-controller-panel",
+    ) as IntelligentLoadControllerPanel;
+    panel.hass = createHass((message) => {
+      calls.push(message);
+      switch (message["type"]) {
+        case "intelligent_load_controller/v1/site_list":
+          return { sites: [{ entry_id: "entry-home", site_id: "home", name: "Home" }] };
+        case "intelligent_load_controller/v1/site_summary":
+          return {
+            entry_id: "entry-home",
+            site_id: "home",
+            name: "Home",
+            state: "idle",
+            active_loads: 1,
+            waiting_loads: 2,
+          };
+        case "intelligent_load_controller/v1/load_list":
+          return {
+            loads: [
+              {
+                load_id: "hot-water",
+                name: "Hot water",
+                type: "hot_water",
+                state: "solar_run",
+                reason_code: "solar_export_qualified",
+                automatic_control: true,
+                current_power_w: 2400,
+                target_status: "on_track",
+                priority: 50,
+                area_name: "Plant",
+              },
+              {
+                load_id: "ev",
+                name: "Family EV",
+                type: "binary_ev",
+                state: "waiting_for_window",
+                reason_code: "deadline_catchup",
+                automatic_control: true,
+                target_status: "at_risk",
+                priority: 90,
+                area_name: "Garage",
+              },
+              {
+                load_id: "battery",
+                name: "Battery charger",
+                type: "battery_charger",
+                state: "target_complete",
+                reason_code: "daily_target_met",
+                automatic_control: false,
+                target_status: "complete",
+              },
+              {
+                load_id: "pool",
+                name: "Pool pump",
+                type: "generic_binary",
+                state: "idle",
+                reason_code: "lowest_cost_window",
+                automatic_control: true,
+                priority: 20,
+                area_name: "Yard",
+              },
+            ],
+          };
+        case "intelligent_load_controller/v1/daily_timeline":
+          return { intervals: [], generated_at: null };
+        default:
+          return {};
+      }
+    });
+    document.body.append(panel);
+
+    await vi.waitFor(() => {
+      expect(panel.shadowRoot?.textContent).toContain("Home Status");
+    });
+    const loadsButton = Array.from(panel.shadowRoot?.querySelectorAll(".nav-button") ?? []).find(
+      (button) => button.textContent?.trim().endsWith("Loads"),
+    ) as HTMLButtonElement;
+    loadsButton.click();
+
+    await vi.waitFor(() => {
+      expect(window.location.pathname).toBe("/intelligent-load-controller/loads");
+      expect(panel.shadowRoot?.textContent).toContain("Find and organise loads");
+    });
+
+    const visibleLoadIds = (): readonly string[] =>
+      Array.from(panel.shadowRoot?.querySelectorAll("ilc-load-summary-card") ?? []).map((element) => {
+        const card = element as HTMLElement & { load?: { load_id: string } };
+        return card.load?.load_id ?? "missing";
+      });
+    const search = panel.shadowRoot?.querySelector("#load-catalogue-search") as HTMLInputElement;
+    search.value = "garage";
+    search.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await vi.waitFor(() => {
+      expect(visibleLoadIds()).toEqual(["ev"]);
+    });
+
+    const status = panel.shadowRoot?.querySelector("#load-catalogue-status") as HTMLSelectElement;
+    status.value = "needs_attention";
+    status.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    await vi.waitFor(() => {
+      expect(panel.shadowRoot?.textContent).toContain("1 of 4 load(s)");
+      expect(visibleLoadIds()).toEqual(["ev"]);
+    });
+
+    search.value = "";
+    search.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    const group = panel.shadowRoot?.querySelector("#load-catalogue-group") as HTMLSelectElement;
+    group.value = "none";
+    group.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    const sort = panel.shadowRoot?.querySelector("#load-catalogue-sort") as HTMLSelectElement;
+    sort.value = "highest_power";
+    sort.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    status.value = "all";
+    status.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    await vi.waitFor(() => {
+      expect(visibleLoadIds()[0]).toBe("hot-water");
+    });
+
+    group.value = "area";
+    group.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    await vi.waitFor(() => {
+      expect(panel.shadowRoot?.textContent).toContain("Garage");
+      expect(panel.shadowRoot?.textContent).toContain("No area assigned");
+    });
+
+    expect(calls.map((call) => call["type"])).not.toEqual(
+      expect.arrayContaining([
+        "intelligent_load_controller/v1/automatic_control_set",
+        "intelligent_load_controller/v1/override_start",
+        "intelligent_load_controller/v1/override_clear",
+      ]),
+    );
   });
 
   it("shows a reconnecting state without issuing a websocket command", async () => {
@@ -84,7 +417,7 @@ describe("intelligent-load-controller-panel", () => {
     });
 
     expect(panel.shadowRoot?.textContent).toContain("Reconnecting to Home Assistant");
-    expect(panel.shadowRoot?.textContent).toContain("Load details");
+    expect(shellText(panel)).toContain("Load details");
     expect(callWS).not.toHaveBeenCalled();
   });
 
@@ -216,7 +549,7 @@ describe("intelligent-load-controller-panel", () => {
 
     await waitForRender();
     const configureButton = Array.from(panel.shadowRoot?.querySelectorAll(".nav-button") ?? []).find(
-      (button) => button.textContent?.trim() === "Configure",
+      (button) => button.textContent?.trim().endsWith("Settings"),
     ) as HTMLButtonElement;
     configureButton.click();
 
@@ -255,7 +588,7 @@ describe("intelligent-load-controller-panel", () => {
     });
   });
 
-  it("loads plan, timeline, history, and events only when their views are opened", async () => {
+  it("loads plan details, insights, and events only when their views are opened", async () => {
     const calls: Record<string, unknown>[] = [];
     const panel = document.createElement(
       "intelligent-load-controller-panel",
@@ -271,17 +604,37 @@ describe("intelligent-load-controller-panel", () => {
             site_id: "home",
             name: "Home",
             state: "idle",
-            active_loads: 0,
+            active_loads: 1,
             waiting_loads: 0,
           };
         case "intelligent_load_controller/v1/load_list":
-          return { loads: [] };
+          return {
+            loads: [
+              {
+                load_id: "hot-water",
+                name: "Hot water",
+                type: "hot_water",
+                state: "idle",
+                reason_code: "lowest_cost_window",
+                automatic_control: true,
+              },
+            ],
+          };
         case "intelligent_load_controller/v1/current_plan":
           return null;
         case "intelligent_load_controller/v1/daily_timeline":
           return { intervals: [], generated_at: null };
         case "intelligent_load_controller/v1/historical_summary":
-          return { daily_summaries: [], data_quality: "unknown" };
+          return {
+            daily_summaries: [
+              {
+                date: "2026-07-23",
+                controlled_energy_kwh: 4.2,
+                nested_payload: { raw: true },
+              },
+            ],
+            data_quality: "unknown",
+          };
         case "intelligent_load_controller/v1/event_journal":
           return { events: [] };
         default:
@@ -290,14 +643,24 @@ describe("intelligent-load-controller-panel", () => {
     });
     document.body.append(panel);
 
-    await waitForRender();
+    await vi.waitFor(() => {
+      expect(calls).toContainEqual({
+        type: "intelligent_load_controller/v1/daily_timeline",
+        entry_id: "entry-home",
+      });
+      expect(calls).not.toContainEqual({
+        type: "intelligent_load_controller/v1/current_plan",
+        entry_id: "entry-home",
+      });
+    });
     const buttonWithText = (text: string): HTMLButtonElement =>
       Array.from(panel.shadowRoot?.querySelectorAll(".nav-button") ?? []).find(
-        (button) => button.textContent?.trim() === text,
+        (button) => button.textContent?.trim().endsWith(text),
       ) as HTMLButtonElement;
 
     buttonWithText("Plan").click();
     await vi.waitFor(() => {
+      expect(window.location.pathname).toBe("/intelligent-load-controller/plan");
       expect(calls).toEqual(
         expect.arrayContaining([
           { type: "intelligent_load_controller/v1/current_plan", entry_id: "entry-home" },
@@ -305,14 +668,72 @@ describe("intelligent-load-controller-panel", () => {
         ]),
       );
     });
-    buttonWithText("History").click();
+    buttonWithText("Insights").click();
     await vi.waitFor(() => {
+      expect(window.location.pathname).toBe("/intelligent-load-controller/insights");
       expect(calls).toEqual(
         expect.arrayContaining([
           { type: "intelligent_load_controller/v1/historical_summary", entry_id: "entry-home" },
           { type: "intelligent_load_controller/v1/event_journal", entry_id: "entry-home" },
         ]),
       );
+      expect(panel.shadowRoot?.textContent).toContain("controlled energy kwh");
+      expect(panel.shadowRoot?.textContent).toContain("4.2");
+      expect(panel.shadowRoot?.textContent).toContain("Detailed value available in Diagnostics");
+      expect(panel.shadowRoot?.textContent).not.toContain('{"date"');
+    });
+  });
+
+  it("opens a direct load route with the new /loads/:loadId path", async () => {
+    const calls: Record<string, unknown>[] = [];
+    const panel = document.createElement(
+      "intelligent-load-controller-panel",
+    ) as IntelligentLoadControllerPanel;
+    panel.route = { path: "/loads/hot-water", prefix: "/intelligent-load-controller" };
+    panel.hass = createHass((message) => {
+      calls.push(message);
+      switch (message["type"]) {
+        case "intelligent_load_controller/v1/site_list":
+          return { sites: [{ entry_id: "entry-home", site_id: "home", name: "Home" }] };
+        case "intelligent_load_controller/v1/site_summary":
+          return {
+            entry_id: "entry-home",
+            site_id: "home",
+            name: "Home",
+            state: "idle",
+            active_loads: 0,
+            waiting_loads: 1,
+          };
+        case "intelligent_load_controller/v1/load_list":
+          return {
+            loads: [
+              {
+                load_id: "hot-water",
+                name: "Hot water",
+                type: "hot_water",
+                state: "idle",
+                reason_code: "lowest_cost_window",
+                automatic_control: true,
+                config_revision: 9,
+              },
+            ],
+          };
+        case "intelligent_load_controller/v1/load_detail":
+          return { load_id: "hot-water", presentation: "fixture" };
+        default:
+          return {};
+      }
+    });
+    document.body.append(panel);
+
+    await vi.waitFor(() => {
+      expect(panel.shadowRoot?.textContent).toContain("Hot water");
+      expect(shellText(panel)).toContain("Load details");
+      expect(calls).toContainEqual({
+        type: "intelligent_load_controller/v1/load_detail",
+        entry_id: "entry-home",
+        load_id: "hot-water",
+      });
     });
   });
 
@@ -362,7 +783,7 @@ describe("intelligent-load-controller-panel", () => {
     await vi.waitFor(() => {
       expect(panel.shadowRoot?.querySelector(".load-card")).not.toBeNull();
     });
-    const openControls = Array.from(panel.shadowRoot?.querySelectorAll(".secondary-button") ?? []).find(
+    const openControls = Array.from(panel.shadowRoot?.querySelectorAll("button") ?? []).find(
       (button) => button.textContent?.trim() === "Open controls",
     ) as HTMLButtonElement;
     openControls.click();
@@ -501,7 +922,7 @@ describe("intelligent-load-controller-panel", () => {
 
     await waitForRender();
     const configureButton = Array.from(panel.shadowRoot?.querySelectorAll(".nav-button") ?? []).find(
-      (button) => button.textContent?.trim() === "Configure",
+      (button) => button.textContent?.trim().endsWith("Settings"),
     ) as HTMLButtonElement;
     configureButton.click();
     await vi.waitFor(() => {
