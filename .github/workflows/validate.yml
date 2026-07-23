@@ -14,7 +14,7 @@ jobs:
   hacs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Validate HACS integration package
         uses: hacs/action@main
         with:
@@ -25,6 +25,6 @@ jobs:
   hassfest:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Validate Home Assistant custom integration conventions
         uses: home-assistant/actions/hassfest@master
