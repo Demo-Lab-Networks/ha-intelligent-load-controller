@@ -3,7 +3,7 @@
 **Status:** Phase 0 contract for optional display-oriented backend fields.  
 **Rule:** These fields present backend-authoritative decisions. They must not change planner, safety, actuator, or optimisation semantics.
 
-**2026-07-23 update:** The Phase 2 Overview starter renders a better frontend hierarchy from existing typed backend fields (`health`, `fault`, `target_status`, `manual_override`, controller state, measurements, and reason codes). That does not close the backend gaps below; dedicated optional presentation and backend-ranked attention fields are still required for the full Phase 2 exit gate.
+**2026-07-23 update:** The Phase 2 Overview starter renders a better frontend hierarchy from existing typed backend fields (`health`, `fault`, `target_status`, `manual_override`, controller state, measurements, and reason codes). A first optional V1 backend-ranked `site_summary.attention[]` feed now covers current warnings and manual overrides with backend-owned rank, severity, reason code, affected object, and destination action. This narrows, but does not close, the broader backend presentation gaps below.
 
 ## Current backend contract strengths
 
@@ -21,7 +21,7 @@
 | Next action | Current plan has proposals/next action inconsistently available to overview. | `next_action_at`, `next_action_title`, `next_action_reason`, `next_action_load_id`. | Must use existing plan/arbitrator evidence. |
 | Tariff context | Tariff is not a display-ready period in current summary. | `tariff_period`, `tariff_period_ends_at`, `tariff_status_level`. | Phase 5+ data; omit when pricing unavailable. |
 | Energy flow | Frontend has values but no canonical node/edge model. | `energy_flow_nodes[]`, `energy_flow_edges[]` with IDs, labels, power, quality, direction. | Lets frontend render without inventing source allocation. |
-| Attention feed | Warnings are unranked/non-uniform. | New read `attention_items` or `site_summary.attention[]` with `rank`, `severity`, `title`, `summary`, `affected_kind`, `affected_id`, `action`. | Severity/rank must be backend-authoritative. |
+| Attention feed | Warnings were unranked/non-uniform. The Phase 2 starter now exposes backend-ranked warning/override items but not target-risk, deadline, tariff, or opportunity items. | Extend optional `site_summary.attention[]` with additional backend-owned target/deadline/tariff/opportunity sources. | Severity/rank/action are backend-authoritative. Frontend localises stable codes and may sort by backend `rank`. |
 | Load cards | Load summary fields are generic. | `display_state`, `status_level`, `status_title`, `status_summary`, `target_label`, `target_current`, `target_required`, `target_percent`, `attention_rank`. | Preserve existing fields for compatibility. |
 | Action eligibility | Frontend can show buttons without clear backend eligibility/effect copy. | `action_eligibility`, `action_block_reason`, `boost_presets`, `override_expires_at`, `override_summary`. | Writes still go through existing action endpoints. |
 | Load detail | `load_detail` is currently broad JSON without designed sections. | `type_specific_status`, `decision_explanation`, `target_projection`, `schedule_summary`, `source_breakdown`, `learned_estimate`, `recent_meaningful_events`. | Optional shape should be schema-tested. |
@@ -53,5 +53,6 @@ Frontend may sort by backend `rank`; it must not reinterpret severity from Engli
 - Add backend schema tests for all optional presentation fields.
 - Add WebSocket contract tests proving old clients can ignore new fields.
 - Add frontend model tests for missing/partial presentation fields.
+- Maintain the current `site_summary.attention[]` contract tests for backend rank/severity/action and frontend fallback compatibility.
 - Add permission and stable-error tests for Settings and Diagnostics routes.
 - Keep presentation models redacted; no entity secrets or unrestricted state.

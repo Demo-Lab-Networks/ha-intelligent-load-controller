@@ -12,6 +12,7 @@ All notable changes will be documented here. The project intends to follow [Keep
 - Read-only frontend diagnostics route and API facade convenience method.
 - Route-level page modules for Overview, Loads, load detail, Plan, Insights, Settings, and Diagnostics, plus shared load summary and plan table/proposal components.
 - UX redesign Phase 2 Overview starter slice: Home Status hero, live energy-flow summary, attention list, focused Today KPIs, grouped active/upcoming loads, and deterministic overview presentation helpers.
+- Optional V1 `site_summary.attention[]` backend presentation field for backend-ranked warning and manual-override attention items.
 
 ### Changed
 
@@ -19,6 +20,7 @@ All notable changes will be documented here. The project intends to follow [Keep
 - Local Playwright harness now feeds direct panel paths into the custom panel route property for route testing.
 - Reduced the root panel component by moving presentational page rendering, including Settings and load-detail controls, into dedicated modules.
 - Replaced the Overview equal-weight metric wall with a stronger everyday-operation hierarchy and more contextual load summary cards.
+- Overview attention now prefers backend-owned rank/severity/action data when available while preserving typed-field fallback behaviour for older summaries.
 
 ### Fixed
 

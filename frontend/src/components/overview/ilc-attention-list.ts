@@ -36,23 +36,71 @@ export class IlcAttentionList extends LitElement {
                   <h3>${translate(this.hass, item.titleKey, item.values)}</h3>
                   <p>${translate(this.hass, item.summaryKey, item.values)}</p>
                 </div>
-                ${item.affectedLoadId
-                  ? html`
-                      <button
-                        class="text-button"
-                        type="button"
-                        @click=${() => this.openLoad(item.affectedLoadId)}
-                      >
-                        ${translate(this.hass, "load.open")}
-                      </button>
-                    `
-                  : nothing}
+                ${this.renderAction(item)}
               </article>
             `,
           )}
         </div>
       </section>
     `;
+  }
+
+  private renderAction(item: AttentionItem) {
+    if (item.action === "load_detail" && item.affectedLoadId) {
+      return html`
+        <button
+          class="text-button"
+          type="button"
+          @click=${() => this.openLoad(item.affectedLoadId)}
+        >
+          ${translate(this.hass, "load.open")}
+        </button>
+      `;
+    }
+    if (item.action === "settings") {
+      return html`
+        <button
+          class="text-button"
+          type="button"
+          @click=${() => this.openView("configure")}
+        >
+          ${translate(this.hass, "settings.open")}
+        </button>
+      `;
+    }
+    if (item.action === "diagnostics") {
+      return html`
+        <button
+          class="text-button"
+          type="button"
+          @click=${() => this.openView("diagnostics")}
+        >
+          ${translate(this.hass, "diagnostics.open")}
+        </button>
+      `;
+    }
+    if (item.affectedLoadId) {
+      return html`
+        <button
+          class="text-button"
+          type="button"
+          @click=${() => this.openLoad(item.affectedLoadId)}
+        >
+          ${translate(this.hass, "load.open")}
+        </button>
+      `;
+    }
+    return nothing;
+  }
+
+  private openView(view: "configure" | "diagnostics"): void {
+    this.dispatchEvent(
+      new CustomEvent<{ view: "configure" | "diagnostics" }>("ilc-navigate", {
+        bubbles: true,
+        composed: true,
+        detail: { view },
+      }),
+    );
   }
 
   private openLoad(loadId: string | undefined): void {

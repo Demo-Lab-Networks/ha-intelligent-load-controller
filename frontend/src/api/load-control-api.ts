@@ -1,10 +1,12 @@
 import type {
+  AttentionSeverity,
   DashboardData,
   JsonObject,
   JsonValue,
   LoadProgress,
   LoadSummary,
   Measurement,
+  SiteAttentionItem,
   SiteSummary,
 } from "../models/dashboard";
 import type { HomeAssistant, HomeAssistantUnsubscribe } from "../types/home-assistant";
@@ -169,6 +171,8 @@ export interface SiteSummaryResponse {
   updated_at?: string;
   last_replan_at?: string;
   warnings?: readonly unknown[];
+  attention_count?: number;
+  attention?: readonly unknown[];
 }
 
 export interface LoadListItemResponse {
@@ -474,6 +478,8 @@ function normalizeSiteSummary(response: SiteSummaryResponse): SiteSummary {
     next_deadline: response.next_deadline,
     health,
     updated_at: response.updated_at ?? response.last_replan_at,
+    attention_count: response.attention_count,
+    attention: normalizeAttentionItems(response.attention),
   };
 }
 
@@ -501,6 +507,51 @@ function normalizeLoadSummary(response: LoadListItemResponse): LoadSummary {
 
 function measurementFromWatts(value: number | undefined): Measurement | undefined {
   return value === undefined ? undefined : { value, unit: "W" };
+}
+
+function normalizeAttentionItems(value: readonly unknown[] | undefined): readonly SiteAttentionItem[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const items: SiteAttentionItem[] = [];
+  for (const raw of value) {
+    if (typeof raw !== "object" || raw === null) {
+      continue;
+    }
+    const candidate = raw as Record<string, unknown>;
+    const id = candidate["id"];
+    const code = candidate["code"];
+    const rank = candidate["rank"];
+    const severity = candidate["severity"];
+    if (typeof id !== "string" || typeof code !== "string" || !isFiniteNumber(rank) || !isAttentionSeverity(severity)) {
+      continue;
+    }
+    const affectedKind = candidate["affected_kind"];
+    const affectedId = candidate["affected_id"];
+    const displayName = candidate["display_name"];
+    const action = candidate["action"];
+    const reasonCode = candidate["reason_code"];
+    items.push({
+      id,
+      code,
+      rank,
+      severity,
+      ...(typeof reasonCode === "string" ? { reason_code: reasonCode } : {}),
+      ...(affectedKind === "site" || affectedKind === "load" ? { affected_kind: affectedKind } : {}),
+      ...(typeof affectedId === "string" ? { affected_id: affectedId } : {}),
+      ...(typeof displayName === "string" ? { display_name: displayName } : {}),
+      ...(typeof action === "string" ? { action } : {}),
+    });
+  }
+  return items.sort((left, right) => left.rank - right.rank || left.id.localeCompare(right.id));
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isAttentionSeverity(value: unknown): value is AttentionSeverity {
+  return value === "critical" || value === "warning" || value === "info";
 }
 
 function overrideMode(value: unknown): LoadSummary["manual_override"] | undefined {

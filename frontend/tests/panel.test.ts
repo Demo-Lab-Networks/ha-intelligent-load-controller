@@ -157,6 +157,71 @@ describe("intelligent-load-controller-panel", () => {
     });
   });
 
+  it("opens backend-provided attention destinations from the overview", async () => {
+    const calls: Record<string, unknown>[] = [];
+    const panel = document.createElement(
+      "intelligent-load-controller-panel",
+    ) as IntelligentLoadControllerPanel;
+    panel.hass = createHass((message) => {
+      calls.push(message);
+      switch (message["type"]) {
+        case "intelligent_load_controller/v1/site_list":
+          return { sites: [{ entry_id: "entry-home", site_id: "home", name: "Home" }] };
+        case "intelligent_load_controller/v1/site_summary":
+          return {
+            entry_id: "entry-home",
+            site_id: "home",
+            name: "Home",
+            state: "idle",
+            active_loads: 0,
+            waiting_loads: 0,
+            attention: [
+              {
+                id: "site:configuration_invalid",
+                code: "configuration_invalid",
+                rank: 9,
+                severity: "warning",
+                affected_kind: "site",
+                display_name: "Home",
+                action: "settings",
+              },
+            ],
+          };
+        case "intelligent_load_controller/v1/load_list":
+          return { loads: [] };
+        case "intelligent_load_controller/v1/configuration_read":
+          return {
+            site: {
+              site_name: "Home",
+              grid_sign_convention: "import_positive",
+              config_revision: 1,
+            },
+            loads: [],
+            schema: {},
+          };
+        default:
+          return {};
+      }
+    });
+    document.body.append(panel);
+
+    await vi.waitFor(() => {
+      expect(panel.shadowRoot?.textContent).toContain("Configuration needs attention");
+    });
+    const settingsButton = Array.from(panel.shadowRoot?.querySelectorAll("button") ?? []).find(
+      (button) => button.textContent?.trim() === "Open settings",
+    ) as HTMLButtonElement;
+    settingsButton.click();
+
+    await vi.waitFor(() => {
+      expect(window.location.pathname).toBe("/intelligent-load-controller/settings");
+      expect(calls).toContainEqual({
+        type: "intelligent_load_controller/v1/configuration_read",
+        entry_id: "entry-home",
+      });
+    });
+  });
+
   it("shows a reconnecting state without issuing a websocket command", async () => {
     const callWS = vi.fn();
     const panel = document.createElement(

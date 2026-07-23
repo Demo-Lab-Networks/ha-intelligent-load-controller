@@ -115,4 +115,93 @@ describe("overview presentation", () => {
       ["complete", ["battery"]],
     ]);
   });
+
+  it("prefers backend-ranked attention items when the site summary provides them", () => {
+    const presentation = createOverviewPresentation({
+      site: {
+        ...baseSite,
+        health: "warning",
+        attention: [
+          {
+            id: "site:configuration_invalid",
+            code: "configuration_invalid",
+            rank: 9,
+            severity: "warning",
+            affected_kind: "site",
+            display_name: "Home",
+            action: "settings",
+          },
+          {
+            id: "load:hws:manual_indefinite_override",
+            code: "manual_indefinite_override",
+            rank: 5,
+            severity: "warning",
+            affected_kind: "load",
+            affected_id: "hws",
+            display_name: "Hot water",
+            action: "load_detail",
+          },
+        ],
+      },
+      loads: [
+        load({
+          load_id: "hws",
+          name: "Hot water",
+          manual_override: "indefinite_on",
+        }),
+      ],
+    });
+
+    expect(presentation.attention.map((item) => item.id)).toEqual([
+      "load:hws:manual_indefinite_override",
+      "site:configuration_invalid",
+    ]);
+    expect(presentation.attention[0]).toMatchObject({
+      titleKey: "overview.attention.indefiniteOverride",
+      affectedLoadId: "hws",
+      action: "load_detail",
+    });
+    expect(presentation.attention[1]).toMatchObject({
+      titleKey: "overview.attention.configurationInvalid",
+      action: "settings",
+    });
+    expect(presentation.attention).toHaveLength(2);
+  });
+
+  it("keeps non-duplicated typed-field attention when the backend feed is only partial", () => {
+    const presentation = createOverviewPresentation({
+      site: {
+        ...baseSite,
+        attention: [
+          {
+            id: "site:input_missing",
+            code: "input_missing",
+            rank: 6,
+            severity: "warning",
+            affected_kind: "site",
+            display_name: "Home",
+            action: "diagnostics",
+          },
+        ],
+      },
+      loads: [
+        load({
+          load_id: "ev",
+          name: "EV charger",
+          target_status: "at_risk",
+        }),
+      ],
+    });
+
+    expect(presentation.attention.map((item) => item.id)).toEqual([
+      "site:input_missing",
+      "ev:risk",
+    ]);
+    expect(presentation.attention[1]).toMatchObject({
+      code: "target_at_risk",
+      titleKey: "overview.attention.targetAtRisk",
+      affectedLoadId: "ev",
+      action: "load_detail",
+    });
+  });
 });

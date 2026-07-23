@@ -19,6 +19,20 @@ export interface CurrencyRate {
   quality?: DataQuality;
 }
 
+export type AttentionSeverity = "critical" | "warning" | "info";
+
+export interface SiteAttentionItem {
+  id: string;
+  code: string;
+  rank: number;
+  severity: AttentionSeverity;
+  reason_code?: string;
+  affected_kind?: "site" | "load";
+  affected_id?: string;
+  display_name?: string;
+  action?: string;
+}
+
 /** Stable dashboard contract returned by `site_summary` version 1. */
 export interface SiteSummary {
   site_id: string;
@@ -39,6 +53,8 @@ export interface SiteSummary {
   next_deadline?: string;
   health: "healthy" | "warning" | "error" | "unknown";
   updated_at?: string;
+  attention_count?: number;
+  attention?: readonly SiteAttentionItem[];
 }
 
 export interface LoadProgress {

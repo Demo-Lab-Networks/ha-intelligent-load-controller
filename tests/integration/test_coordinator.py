@@ -115,6 +115,59 @@ async def test_coordinator_preserves_revision_and_manual_override_semantics(
     service_call.assert_not_awaited()
 
 
+async def test_site_summary_exposes_backend_ranked_attention_items(
+    hass,
+    load_control_config_entry,
+    load_config,
+    runtime_store,
+) -> None:
+    """Overview attention severity and ordering are backend-owned fields."""
+
+    coordinator = SiteCoordinator(hass, load_control_config_entry, runtime_store)
+    await coordinator.async_start()
+    first = await coordinator.async_add_load(dict(load_config))
+    second_config = dict(load_config)
+    second_config["display_name"] = "Second load"
+    second = await coordinator.async_add_load(second_config)
+
+    await coordinator.async_start_override(first["load_id"], "on", indefinite=True)
+    await coordinator.async_start_override(
+        second["load_id"], "off", duration=timedelta(minutes=30)
+    )
+
+    summary = await coordinator.async_site_summary()
+    attention = summary["attention"]
+
+    assert summary["attention_count"] == len(attention)
+    assert attention == sorted(attention, key=lambda item: item["rank"])
+    assert {
+        item["code"]: {
+            "rank": item["rank"],
+            "severity": item["severity"],
+            "affected_kind": item["affected_kind"],
+            "affected_id": item.get("affected_id"),
+            "action": item.get("action"),
+        }
+        for item in attention
+        if item["code"] in {"manual_indefinite_override", "manual_timed_boost"}
+    } == {
+        "manual_indefinite_override": {
+            "rank": 5,
+            "severity": "warning",
+            "affected_kind": "load",
+            "affected_id": first["load_id"],
+            "action": "load_detail",
+        },
+        "manual_timed_boost": {
+            "rank": 7,
+            "severity": "info",
+            "affected_kind": "load",
+            "affected_id": second["load_id"],
+            "action": "load_detail",
+        },
+    }
+
+
 async def test_site_rejects_duplicate_actuator_bindings_in_writes_and_previews(
     hass,
     load_control_config_entry,

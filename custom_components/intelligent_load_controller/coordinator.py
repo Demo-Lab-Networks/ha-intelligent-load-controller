@@ -1613,6 +1613,13 @@ class SiteCoordinator:
             feedback for feedback in self._feedback.values() if feedback.confirmed_state
         ]
         snapshot = self._site_snapshot(config)
+        warnings = self._current_warnings(overrides=overrides, site_config=config)
+        attention = self._attention_items(
+            overrides=overrides,
+            site_config=config,
+            configs=[item for _, item in loads],
+            warnings=warnings,
+        )
         return {
             "entry_id": self.entry.entry_id,
             "site_id": self.entry.data.get("site_id"),
@@ -1639,7 +1646,9 @@ class SiteCoordinator:
             if snapshot.available and self._core_site_config(config) is not None
             else "attention",
             "last_replan_at": self._last_replan_at.isoformat() if self._last_replan_at else None,
-            "warnings": self._current_warnings(overrides=overrides, site_config=config),
+            "warnings": warnings,
+            "attention_count": len(attention),
+            "attention": attention,
         }
 
     async def async_load_list(self) -> list[dict[str, Any]]:
@@ -2905,6 +2914,152 @@ class SiteCoordinator:
                 }
             )
         return warnings
+
+    def _attention_items(
+        self,
+        *,
+        overrides: Mapping[str, Mapping[str, Any]] | None = None,
+        site_config: Mapping[str, Any] | None = None,
+        configs: Sequence[Mapping[str, Any]] | None = None,
+        warnings: Sequence[Mapping[str, str]] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Build backend-ranked display attention without changing control policy."""
+
+        config = self.site_config if site_config is None else site_config
+        load_configs = (
+            [item for _, item in self._load_configs()]
+            if configs is None
+            else [dict(item) for item in configs]
+        )
+        current_warnings = (
+            self._current_warnings(overrides=overrides, site_config=config, configs=load_configs)
+            if warnings is None
+            else list(warnings)
+        )
+        current_overrides = self._active_overrides() if overrides is None else overrides
+        load_names = {
+            str(item.get("load_id")): str(
+                item.get("display_name") or item.get("name") or item.get("load_id")
+            )
+            for item in load_configs
+            if item.get("load_id")
+        }
+        items: list[dict[str, Any]] = []
+        seen: set[str] = set()
+
+        def add(
+            *,
+            item_id: str,
+            code: str,
+            rank: int,
+            severity: str,
+            affected_kind: str,
+            affected_id: str | None = None,
+            display_name: str | None = None,
+            action: str | None = None,
+            reason_code: str | None = None,
+        ) -> None:
+            if item_id in seen:
+                return
+            seen.add(item_id)
+            item: dict[str, Any] = {
+                "id": item_id,
+                "code": code,
+                "rank": rank,
+                "severity": severity,
+                "affected_kind": affected_kind,
+                "reason_code": reason_code or code,
+            }
+            if affected_id is not None:
+                item["affected_id"] = affected_id
+            if display_name is not None:
+                item["display_name"] = display_name
+            if action is not None:
+                item["action"] = action
+            items.append(item)
+
+        for load_id in sorted(self._conflicting_actuator_load_ids):
+            add(
+                item_id=f"load:{load_id}:duplicate_actuator_binding",
+                code="duplicate_actuator_binding",
+                rank=1,
+                severity="critical",
+                affected_kind="load",
+                affected_id=load_id,
+                display_name=load_names.get(load_id, load_id),
+                action="settings",
+            )
+
+        for load_id, override in sorted(current_overrides.items()):
+            indefinite = bool(override.get("indefinite"))
+            code = "manual_indefinite_override" if indefinite else "manual_timed_boost"
+            add(
+                item_id=f"load:{load_id}:{code}",
+                code=code,
+                rank=5 if indefinite else 7,
+                severity="warning" if indefinite else "info",
+                affected_kind="load",
+                affected_id=str(load_id),
+                display_name=load_names.get(str(load_id), str(load_id)),
+                action="load_detail",
+            )
+
+        for index, warning in enumerate(current_warnings):
+            code = str(warning.get("code") or "unknown_attention")
+            if code == "manual_indefinite_override":
+                continue
+            if code == "duplicate_actuator_binding":
+                if self._conflicting_actuator_load_ids:
+                    continue
+                add(
+                    item_id="site:duplicate_actuator_binding",
+                    code=code,
+                    rank=1,
+                    severity="critical",
+                    affected_kind="site",
+                    display_name=str(config.get("site_name", "site")),
+                    action="settings",
+                )
+            elif code == "input_missing":
+                add(
+                    item_id="site:input_missing",
+                    code=code,
+                    rank=6,
+                    severity="warning",
+                    affected_kind="site",
+                    display_name=str(config.get("site_name", "site")),
+                    action="diagnostics",
+                )
+            elif code == "configuration_invalid":
+                add(
+                    item_id="site:configuration_invalid",
+                    code=code,
+                    rank=9,
+                    severity="warning",
+                    affected_kind="site",
+                    display_name=str(config.get("site_name", "site")),
+                    action="settings",
+                )
+            else:
+                add(
+                    item_id=f"site:{code}:{index}",
+                    code=code,
+                    rank=10,
+                    severity="info",
+                    affected_kind="site",
+                    display_name=str(config.get("site_name", "site")),
+                    action="diagnostics",
+                )
+
+        return sorted(
+            items,
+            key=lambda item: (
+                int(item["rank"]),
+                str(item.get("affected_kind", "")),
+                str(item.get("affected_id", "")),
+                str(item["code"]),
+            ),
+        )
 
     def _record_decision(
         self, state: str, reason_code: str, message: str, *, load_id: str | None = None

@@ -48,6 +48,24 @@ describe("LoadControlApi", () => {
             controlled_energy_today: { value: 4.2, unit: "kWh", quality: "derived" },
             controlled_cost_today: { value: 1.25, currency: "AUD", unit: "kWh", quality: "derived" },
             next_deadline: "2026-07-23T20:00:00Z",
+            attention_count: 2,
+            attention: [
+              {
+                id: "site:input_missing",
+                code: "input_missing",
+                rank: 6,
+                severity: "warning",
+                affected_kind: "site",
+                display_name: "Home",
+                action: "diagnostics",
+              },
+              {
+                id: "ignored",
+                code: "ignored",
+                rank: "not-a-number",
+                severity: "warning",
+              },
+            ],
           };
         }
         return {
@@ -76,6 +94,18 @@ describe("LoadControlApi", () => {
         controlled_energy_today: { value: 4.2, unit: "kWh", quality: "derived" },
         controlled_cost_today: { value: 1.25, currency: "AUD", unit: "kWh", quality: "derived" },
         next_deadline: "2026-07-23T20:00:00Z",
+        attention_count: 2,
+        attention: [
+          {
+            id: "site:input_missing",
+            code: "input_missing",
+            rank: 6,
+            severity: "warning",
+            affected_kind: "site",
+            display_name: "Home",
+            action: "diagnostics",
+          },
+        ],
       },
       loads: [{ load_id: "hws", load_type: "hot_water", controller_state: "idle" }],
     });

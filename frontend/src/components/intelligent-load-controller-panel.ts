@@ -302,6 +302,7 @@ export class IntelligentLoadControllerPanel extends LitElement {
               .chartComponentState=${this.chartComponentState}
               @ilc-open-load=${this.handleOpenLoad}
               @ilc-edit-load=${this.handleEditLoad}
+              @ilc-navigate=${this.handleNavigation}
             ></ilc-overview-page>
           `
         : this.workspaceView === "loads"

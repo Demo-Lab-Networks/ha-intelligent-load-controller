@@ -1,10 +1,16 @@
 import type { MessageKey } from "../../i18n/messages";
-import type { DashboardData, LoadSummary, SiteSummary } from "../../models/dashboard";
+import type {
+  DashboardData,
+  LoadSummary,
+  SiteAttentionItem,
+  SiteSummary,
+} from "../../models/dashboard";
 
 export type SiteFlowDirection = "exporting" | "importing" | "balanced" | "unknown";
 export type OverviewStatusLevel = "ok" | "info" | "warning" | "critical" | "unknown";
 export type OverviewStatusTone = "neutral" | "info" | "success" | "warning" | "danger";
 export type AttentionSeverity = "critical" | "warning" | "info";
+export type AttentionAction = "load_detail" | "settings" | "diagnostics";
 export type OverviewLoadGroupKey = "attention" | "running" | "upcoming" | "waiting" | "complete";
 
 export interface TargetSummary {
@@ -18,11 +24,13 @@ export interface TargetSummary {
 
 export interface AttentionItem {
   id: string;
+  code?: string;
   severity: AttentionSeverity;
   titleKey: MessageKey;
   summaryKey: MessageKey;
   values: Readonly<Record<string, string | number>>;
   affectedLoadId?: string;
+  action?: AttentionAction;
 }
 
 export interface OverviewHeroPresentation {
@@ -137,10 +145,30 @@ export function summariseTargets(loads: readonly LoadSummary[]): TargetSummary {
 }
 
 export function createAttentionItems(dashboard: DashboardData): readonly AttentionItem[] {
+  const backendAttention = createBackendAttentionItems(dashboard.site.attention);
+  const fallbackAttention = createFallbackAttentionItems(dashboard);
+  if (backendAttention.length > 0) {
+    const covered = new Set(backendAttention.map(attentionCoverageKey));
+    const hasBackendSiteAttention = backendAttention.some((item) => !item.affectedLoadId);
+    return [
+      ...backendAttention,
+      ...fallbackAttention.filter(
+        (item) =>
+          !(item.code === "site_health" && hasBackendSiteAttention) &&
+          !covered.has(attentionCoverageKey(item)),
+      ),
+    ];
+  }
+
+  return fallbackAttention;
+}
+
+function createFallbackAttentionItems(dashboard: DashboardData): readonly AttentionItem[] {
   const items: AttentionItem[] = [];
   if (dashboard.site.health === "error") {
     items.push({
       id: "site-health-error",
+      code: "site_health",
       severity: "critical",
       titleKey: "overview.attention.siteError",
       summaryKey: "overview.attention.siteHealthSummary",
@@ -149,6 +177,7 @@ export function createAttentionItems(dashboard: DashboardData): readonly Attenti
   } else if (dashboard.site.health === "warning") {
     items.push({
       id: "site-health-warning",
+      code: "site_health",
       severity: "warning",
       titleKey: "overview.attention.siteWarning",
       summaryKey: "overview.attention.siteHealthSummary",
@@ -160,60 +189,142 @@ export function createAttentionItems(dashboard: DashboardData): readonly Attenti
     if (load.fault) {
       items.push({
         id: `${load.load_id}:fault`,
+        code: "load_fault",
         severity: "critical",
         titleKey: "overview.attention.loadFault",
         summaryKey: "overview.attention.loadFaultSummary",
         values: { load: load.name },
         affectedLoadId: load.load_id,
+        action: "load_detail",
       });
       continue;
     }
     if (load.target_status === "impossible") {
       items.push({
         id: `${load.load_id}:impossible`,
+        code: "target_impossible",
         severity: "critical",
         titleKey: "overview.attention.targetImpossible",
         summaryKey: "overview.attention.targetImpossibleSummary",
         values: { load: load.name },
         affectedLoadId: load.load_id,
+        action: "load_detail",
       });
       continue;
     }
     if (load.target_status === "at_risk") {
       items.push({
         id: `${load.load_id}:risk`,
+        code: "target_at_risk",
         severity: "warning",
         titleKey: "overview.attention.targetAtRisk",
         summaryKey: "overview.attention.targetAtRiskSummary",
         values: { load: load.name },
         affectedLoadId: load.load_id,
+        action: "load_detail",
       });
       continue;
     }
     if (load.manual_override?.startsWith("indefinite")) {
       items.push({
         id: `${load.load_id}:indefinite-override`,
+        code: "manual_indefinite_override",
         severity: "warning",
         titleKey: "overview.attention.indefiniteOverride",
         summaryKey: "overview.attention.indefiniteOverrideSummary",
         values: { load: load.name },
         affectedLoadId: load.load_id,
+        action: "load_detail",
       });
       continue;
     }
     if (load.manual_override?.startsWith("timed")) {
       items.push({
         id: `${load.load_id}:timed-override`,
+        code: "manual_timed_boost",
         severity: "info",
         titleKey: "overview.attention.timedOverride",
         summaryKey: "overview.attention.timedOverrideSummary",
         values: { load: load.name },
         affectedLoadId: load.load_id,
+        action: "load_detail",
       });
     }
   }
 
   return items;
+}
+
+function attentionCoverageKey(item: AttentionItem): string {
+  return `${item.code ?? item.id}:${item.affectedLoadId ?? "site"}`;
+}
+
+function createBackendAttentionItems(items: readonly SiteAttentionItem[] | undefined): readonly AttentionItem[] {
+  if (!items || items.length === 0) {
+    return [];
+  }
+  return [...items]
+    .sort((left, right) => left.rank - right.rank || left.id.localeCompare(right.id))
+    .map((item) => {
+      const copy = attentionCopyForCode(item.code);
+      const affectedName = item.display_name ?? item.affected_id ?? "site";
+      return {
+        id: item.id,
+        code: item.code,
+        severity: item.severity,
+        titleKey: copy.titleKey,
+        summaryKey: copy.summaryKey,
+        values: {
+          code: item.code,
+          load: affectedName,
+          site: affectedName,
+        },
+        affectedLoadId: item.affected_kind === "load" ? item.affected_id : undefined,
+        action: attentionAction(item.action),
+      };
+    });
+}
+
+function attentionAction(action: string | undefined): AttentionAction | undefined {
+  if (action === "load_detail" || action === "settings" || action === "diagnostics") {
+    return action;
+  }
+  return undefined;
+}
+
+function attentionCopyForCode(code: string): { titleKey: MessageKey; summaryKey: MessageKey } {
+  switch (code) {
+    case "duplicate_actuator_binding":
+      return {
+        titleKey: "overview.attention.duplicateActuator",
+        summaryKey: "overview.attention.duplicateActuatorSummary",
+      };
+    case "configuration_invalid":
+      return {
+        titleKey: "overview.attention.configurationInvalid",
+        summaryKey: "overview.attention.configurationInvalidSummary",
+      };
+    case "input_missing":
+      return {
+        titleKey: "overview.attention.inputMissing",
+        summaryKey: "overview.attention.inputMissingSummary",
+      };
+    case "manual_indefinite_override":
+      return {
+        titleKey: "overview.attention.indefiniteOverride",
+        summaryKey: "overview.attention.indefiniteOverrideSummary",
+      };
+    case "manual_timed_boost":
+      return {
+        titleKey: "overview.attention.timedOverride",
+        summaryKey: "overview.attention.timedOverrideSummary",
+      };
+    default:
+      return {
+        titleKey: "overview.attention.backendItem",
+        summaryKey: "overview.attention.backendItemSummary",
+      };
+  }
 }
 
 export function groupOverviewLoads(loads: readonly LoadSummary[]): readonly OverviewLoadGroup[] {
