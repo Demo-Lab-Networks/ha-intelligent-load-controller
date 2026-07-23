@@ -1612,6 +1612,11 @@ class SiteCoordinator:
         active_feedback = [
             feedback for feedback in self._feedback.values() if feedback.confirmed_state
         ]
+        valid_load_configs = [
+            config for _, config in loads if config.get("load_id") and not config.get("invalid")
+        ]
+        active_load_count = len(active_feedback)
+        waiting_load_count = max(0, len(valid_load_configs) - active_load_count)
         snapshot = self._site_snapshot(config)
         warnings = self._current_warnings(overrides=overrides, site_config=config)
         attention = self._attention_items(
@@ -1620,27 +1625,26 @@ class SiteCoordinator:
             configs=[item for _, item in loads],
             warnings=warnings,
         )
+        presentation = self._site_summary_presentation(
+            config=config,
+            load_configs=valid_load_configs,
+            attention=attention,
+            active_load_count=active_load_count,
+            waiting_load_count=waiting_load_count,
+            snapshot=snapshot,
+        )
         return {
             "entry_id": self.entry.entry_id,
             "site_id": self.entry.data.get("site_id"),
             "name": config["site_name"],
             "config_revision": config["config_revision"],
             "state": "initialising" if not self._started else "idle",
-            "active_loads": len(active_feedback),
-            "waiting_loads": max(
-                0,
-                len(
-                    [
-                        config
-                        for _, config in loads
-                        if config.get("load_id") and not config.get("invalid")
-                    ]
-                )
-                - len(active_feedback),
-            ),
+            "active_loads": active_load_count,
+            "waiting_loads": waiting_load_count,
             "total_controlled_power_w": round(
                 sum(max(0.0, feedback.active_power_w or 0.0) for feedback in active_feedback), 3
             ),
+            **self._site_summary_measurements(snapshot),
             "next_action": self._last_plan.get("next_action") if self._last_plan else None,
             "constraint_status": "ok"
             if snapshot.available and self._core_site_config(config) is not None
@@ -1649,6 +1653,7 @@ class SiteCoordinator:
             "warnings": warnings,
             "attention_count": len(attention),
             "attention": attention,
+            "presentation": presentation,
         }
 
     async def async_load_list(self) -> list[dict[str, Any]]:
@@ -2882,6 +2887,248 @@ class SiteCoordinator:
             presentation["target_status"] = target_status
         presentation.update(self._next_plan_action_for_load(load_id))
         return presentation
+
+    @staticmethod
+    def _site_summary_measurements(snapshot: SitePowerSnapshot) -> dict[str, Any]:
+        """Return bounded live site measurements for panel display."""
+
+        payload: dict[str, Any] = {}
+        if snapshot.available:
+            payload["grid_import"] = {
+                "value": round(max(0.0, snapshot.grid_import_w), 3),
+                "unit": "W",
+                "quality": "measured",
+            }
+            payload["grid_export"] = {
+                "value": round(max(0.0, -snapshot.grid_import_w), 3),
+                "unit": "W",
+                "quality": "measured",
+            }
+        if snapshot.solar_generation_w is not None:
+            payload["solar_production"] = {
+                "value": round(max(0.0, snapshot.solar_generation_w), 3),
+                "unit": "W",
+                "quality": "measured",
+            }
+        phase_payload = {
+            f"phase_{phase.lower()}_power": {
+                "value": round(float(value), 3),
+                "unit": "W",
+                "quality": "measured",
+            }
+            for phase, value in snapshot.phase_import_w
+            if phase.lower() in {"a", "b", "c"}
+        }
+        payload.update(phase_payload)
+        return payload
+
+    def _site_summary_presentation(
+        self,
+        *,
+        config: Mapping[str, Any],
+        load_configs: Sequence[Mapping[str, Any]],
+        attention: Sequence[Mapping[str, Any]],
+        active_load_count: int,
+        waiting_load_count: int,
+        snapshot: SitePowerSnapshot,
+    ) -> dict[str, Any]:
+        """Return backend-owned Home Status presentation metadata."""
+
+        target_summary = self._site_target_summary(load_configs)
+        next_action = self._next_site_plan_action(load_configs)
+        status = self._site_presentation_status(
+            attention=attention,
+            active_load_count=active_load_count,
+            waiting_load_count=waiting_load_count,
+            load_count=len(load_configs),
+            snapshot=snapshot,
+        )
+        presentation: dict[str, Any] = {
+            **status,
+            "flow_direction": self._site_flow_direction(snapshot),
+            "target_summary": target_summary,
+        }
+        reason_code = self._site_decision_reason(
+            load_configs=load_configs,
+            attention=attention,
+            next_action=next_action,
+        )
+        if reason_code is not None:
+            presentation["decision_reason_code"] = reason_code
+        presentation.update(next_action)
+        return presentation
+
+    def _site_target_summary(
+        self,
+        load_configs: Sequence[Mapping[str, Any]],
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, int]:
+        """Return target health counts across configured target-bearing loads."""
+
+        current_time = datetime.now(UTC) if now is None else now
+        summary = {
+            "total": 0,
+            "complete": 0,
+            "on_track": 0,
+            "at_risk": 0,
+            "impossible": 0,
+            "unknown": 0,
+        }
+        for config in load_configs:
+            load_id = config.get("load_id")
+            if not isinstance(load_id, str) or not self._load_has_target(config):
+                continue
+            summary["total"] += 1
+            progress = self._load_target_progress(config, load_id)
+            status = self._load_target_status(config, load_id, progress, now=current_time)
+            if status in {"complete", "on_track", "at_risk", "impossible"}:
+                summary[status] += 1
+            else:
+                summary["unknown"] += 1
+        return summary
+
+    def _next_site_plan_action(
+        self,
+        load_configs: Sequence[Mapping[str, Any]],
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, str]:
+        """Return the next planned site action using stored plan evidence."""
+
+        if not self._last_plan:
+            return {}
+        intervals = self._last_plan.get("intervals")
+        if not isinstance(intervals, list):
+            return {}
+        current_time = datetime.now(UTC) if now is None else now
+        load_names = {
+            str(config.get("load_id")): str(
+                config.get("display_name") or config.get("name") or config.get("load_id")
+            )
+            for config in load_configs
+            if isinstance(config.get("load_id"), str)
+        }
+        candidates: list[tuple[datetime, str, dict[str, str]]] = []
+        for interval in intervals:
+            if not isinstance(interval, Mapping):
+                continue
+            load_id = interval.get("load_id")
+            if not isinstance(load_id, str):
+                continue
+            start = self._parse_deadline(interval.get("start_at"))
+            end = self._parse_deadline(interval.get("end_at"))
+            if start is None or end is None or end <= current_time:
+                continue
+            if start <= current_time:
+                action_at = end
+                action_kind = "stop"
+            else:
+                action_at = start
+                action_kind = "start"
+            reason_code = str(interval.get("reason_code") or "waiting_for_plan")
+            payload = {
+                "next_action_at": action_at.isoformat(),
+                "next_action_kind": action_kind,
+                "next_action_load_id": load_id,
+                "next_action_display_name": load_names.get(load_id, load_id),
+                "next_action_reason_code": reason_code,
+            }
+            candidates.append((action_at, load_id, payload))
+        if not candidates:
+            return {}
+        _, _, payload = min(candidates, key=lambda item: (item[0], item[1]))
+        return payload
+
+    @staticmethod
+    def _site_presentation_status(
+        *,
+        attention: Sequence[Mapping[str, Any]],
+        active_load_count: int,
+        waiting_load_count: int,
+        load_count: int,
+        snapshot: SitePowerSnapshot,
+    ) -> dict[str, Any]:
+        """Return stable status/summary codes for the Home Status hero."""
+
+        if any(item.get("severity") == "critical" for item in attention):
+            return {
+                "status_level": "critical",
+                "status_code": "needs_attention",
+                "summary_code": "attention",
+                "summary_values": {"count": len(attention)},
+            }
+        if any(item.get("severity") == "warning" for item in attention):
+            return {
+                "status_level": "warning",
+                "status_code": "watch",
+                "summary_code": "attention",
+                "summary_values": {"count": len(attention)},
+            }
+        if active_load_count > 0:
+            return {
+                "status_level": "info",
+                "status_code": "controlling",
+                "summary_code": "active",
+                "summary_values": {
+                    "active": active_load_count,
+                    "waiting": waiting_load_count,
+                },
+            }
+        flow_direction = SiteCoordinator._site_flow_direction(snapshot)
+        if flow_direction == "exporting":
+            status_code = "exporting"
+        elif flow_direction == "importing":
+            status_code = "importing"
+        else:
+            status_code = "monitoring"
+        return {
+            "status_level": "ok" if snapshot.available else "unknown",
+            "status_code": status_code,
+            "summary_code": "monitoring",
+            "summary_values": {
+                "waiting": waiting_load_count,
+                "total": load_count,
+            },
+        }
+
+    @staticmethod
+    def _site_flow_direction(snapshot: SitePowerSnapshot) -> str:
+        """Return a coarse grid-flow direction for site presentation."""
+
+        if not snapshot.available:
+            return "unknown"
+        if snapshot.grid_import_w > 1:
+            return "importing"
+        if snapshot.grid_import_w < -1:
+            return "exporting"
+        return "balanced"
+
+    def _site_decision_reason(
+        self,
+        *,
+        load_configs: Sequence[Mapping[str, Any]],
+        attention: Sequence[Mapping[str, Any]],
+        next_action: Mapping[str, str],
+    ) -> str | None:
+        """Return the most relevant stable reason code for the site hero."""
+
+        for item in attention:
+            if item.get("severity") in {"critical", "warning"}:
+                reason_code = item.get("reason_code") or item.get("code")
+                if isinstance(reason_code, str) and reason_code:
+                    return reason_code
+        reason_code = next_action.get("next_action_reason_code")
+        if isinstance(reason_code, str) and reason_code:
+            return reason_code
+        for config in load_configs:
+            load_id = config.get("load_id")
+            if not isinstance(load_id, str):
+                continue
+            plan_reason = self._load_primary_plan_reason(load_id, "")
+            if plan_reason:
+                return plan_reason
+        return "waiting_for_plan"
 
     def _load_runtime_for(self, load_id: str) -> dict[str, Any]:
         """Return bounded persisted runtime evidence for one load."""

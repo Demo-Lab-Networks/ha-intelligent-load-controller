@@ -169,6 +169,68 @@ describe("overview presentation", () => {
     expect(presentation.attention).toHaveLength(2);
   });
 
+  it("prefers backend-owned Home Status presentation over frontend-derived hero state", () => {
+    const presentation = createOverviewPresentation({
+      site: {
+        ...baseSite,
+        health: "healthy",
+        grid_export: { value: 1200, unit: "W", quality: "measured" },
+        waiting_load_count: 4,
+        presentation: {
+          status_level: "warning",
+          status_code: "watch",
+          summary_code: "attention",
+          summary_values: { count: 2 },
+          flow_direction: "importing",
+          target_summary: {
+            total: 1,
+            complete: 0,
+            onTrack: 0,
+            atRisk: 1,
+            impossible: 0,
+            unknown: 0,
+          },
+          decision_reason_code: "input_missing",
+          next_action_at: "2026-07-23T11:00:00Z",
+          next_action_kind: "start",
+          next_action_display_name: "Hot water",
+          next_action_reason_code: "lowest_cost_window",
+        },
+      },
+      loads: [
+        load({
+          load_id: "hws",
+          name: "Hot water",
+          controller_state: "solar_run",
+          target_status: "complete",
+        }),
+        load({ load_id: "ev", name: "EV", target_status: "complete" }),
+      ],
+    });
+
+    expect(presentation.hero).toMatchObject({
+      level: "warning",
+      tone: "warning",
+      titleKey: "overview.status.watch",
+      summaryKey: "overview.status.attentionSummary",
+      summaryValues: { count: 2 },
+      flow: "importing",
+      primaryReasonCode: "input_missing",
+      nextActionAt: "2026-07-23T11:00:00Z",
+      nextActionKind: "start",
+      nextActionDisplayName: "Hot water",
+      nextActionReasonCode: "lowest_cost_window",
+      targetSummary: {
+        total: 1,
+        complete: 0,
+        onTrack: 0,
+        atRisk: 1,
+        impossible: 0,
+        unknown: 0,
+      },
+    });
+  });
+
   it("keeps non-duplicated typed-field attention when the backend feed is only partial", () => {
     const presentation = createOverviewPresentation({
       site: {

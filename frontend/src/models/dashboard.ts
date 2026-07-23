@@ -33,6 +33,33 @@ export interface SiteAttentionItem {
   action?: string;
 }
 
+export type SitePresentationLevel = "ok" | "info" | "warning" | "critical" | "unknown";
+export type SiteFlowDirection = "exporting" | "importing" | "balanced" | "unknown";
+
+export interface SiteTargetSummary {
+  total: number;
+  complete: number;
+  onTrack: number;
+  atRisk: number;
+  impossible: number;
+  unknown: number;
+}
+
+export interface SitePresentation {
+  status_level?: SitePresentationLevel;
+  status_code?: string;
+  summary_code?: string;
+  summary_values?: Readonly<Record<string, string | number>>;
+  flow_direction?: SiteFlowDirection;
+  target_summary?: SiteTargetSummary;
+  decision_reason_code?: string;
+  next_action_at?: string;
+  next_action_kind?: "start" | "stop";
+  next_action_load_id?: string;
+  next_action_display_name?: string;
+  next_action_reason_code?: string;
+}
+
 /** Stable dashboard contract returned by `site_summary` version 1. */
 export interface SiteSummary {
   site_id: string;
@@ -55,6 +82,7 @@ export interface SiteSummary {
   updated_at?: string;
   attention_count?: number;
   attention?: readonly SiteAttentionItem[];
+  presentation?: SitePresentation;
 }
 
 export interface LoadProgress {

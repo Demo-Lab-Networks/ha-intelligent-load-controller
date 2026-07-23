@@ -44,6 +44,10 @@ export interface OverviewHeroPresentation {
   flow: SiteFlowDirection;
   primaryReasonCode?: string;
   nextAction?: string;
+  nextActionAt?: string;
+  nextActionKind?: "start" | "stop";
+  nextActionDisplayName?: string;
+  nextActionReasonCode?: string;
   targetSummary: TargetSummary;
 }
 
@@ -102,11 +106,11 @@ const WAITING_STATES = new Set([
 ]);
 
 export function createOverviewPresentation(dashboard: DashboardData): OverviewPresentation {
-  const targetSummary = summariseTargets(dashboard.loads);
+  const targetSummary = dashboard.site.presentation?.target_summary ?? summariseTargets(dashboard.loads);
   const attention = createAttentionItems(dashboard);
   const runningLoads = dashboard.loads.filter(isLoadRunning);
   const waitingLoads = dashboard.loads.filter((load) => !isLoadRunning(load) && WAITING_STATES.has(load.controller_state));
-  const flow = classifySiteFlow(dashboard.site);
+  const flow = dashboard.site.presentation?.flow_direction ?? classifySiteFlow(dashboard.site);
   const hero = createHeroPresentation(dashboard, {
     attention,
     flow,
@@ -589,6 +593,39 @@ function createHeroPresentation(
     waitingLoads: readonly LoadSummary[];
   },
 ): OverviewHeroPresentation {
+  const fallback = createFallbackHeroPresentation(dashboard, context);
+  const presentation = dashboard.site.presentation;
+  if (presentation === undefined) {
+    return fallback;
+  }
+  const summaryKey = statusSummaryKey(presentation.summary_code);
+  return {
+    ...fallback,
+    level: presentation.status_level ?? fallback.level,
+    tone: presentation.status_level ? toneForSiteLevel(presentation.status_level) : fallback.tone,
+    titleKey: statusTitleKey(presentation.status_code) ?? fallback.titleKey,
+    summaryKey: summaryKey ?? fallback.summaryKey,
+    summaryValues: summaryKey ? (presentation.summary_values ?? fallback.summaryValues) : fallback.summaryValues,
+    flow: presentation.flow_direction ?? fallback.flow,
+    primaryReasonCode: presentation.decision_reason_code ?? fallback.primaryReasonCode,
+    nextActionAt: presentation.next_action_at ?? fallback.nextActionAt,
+    nextActionKind: presentation.next_action_kind ?? fallback.nextActionKind,
+    nextActionDisplayName: presentation.next_action_display_name ?? fallback.nextActionDisplayName,
+    nextActionReasonCode: presentation.next_action_reason_code ?? fallback.nextActionReasonCode,
+    targetSummary: presentation.target_summary ?? fallback.targetSummary,
+  };
+}
+
+function createFallbackHeroPresentation(
+  dashboard: DashboardData,
+  context: {
+    attention: readonly AttentionItem[];
+    flow: SiteFlowDirection;
+    runningLoads: readonly LoadSummary[];
+    targetSummary: TargetSummary;
+    waitingLoads: readonly LoadSummary[];
+  },
+): OverviewHeroPresentation {
   const firstCritical = context.attention.find((item) => item.severity === "critical");
   const firstWarning = context.attention.find((item) => item.severity === "warning");
   const primaryLoad = context.runningLoads[0] ?? context.waitingLoads[0] ?? dashboard.loads[0];
@@ -602,6 +639,10 @@ function createHeroPresentation(
       flow: context.flow,
       primaryReasonCode: primaryLoad?.reason_code,
       nextAction: primaryLoad?.next_action,
+      nextActionAt: primaryLoad?.next_action_at,
+      nextActionKind: primaryLoad?.next_action_kind,
+      nextActionDisplayName: primaryLoad?.name,
+      nextActionReasonCode: primaryLoad?.next_action_reason_code,
       targetSummary: context.targetSummary,
     };
   }
@@ -615,9 +656,14 @@ function createHeroPresentation(
       flow: context.flow,
       primaryReasonCode: primaryLoad?.reason_code,
       nextAction: primaryLoad?.next_action,
+      nextActionAt: primaryLoad?.next_action_at,
+      nextActionKind: primaryLoad?.next_action_kind,
+      nextActionDisplayName: primaryLoad?.name,
+      nextActionReasonCode: primaryLoad?.next_action_reason_code,
       targetSummary: context.targetSummary,
     };
   }
+  const runningLoad = context.runningLoads[0];
   if (context.runningLoads.length > 0) {
     return {
       level: "info",
@@ -629,8 +675,12 @@ function createHeroPresentation(
         waiting: dashboard.site.waiting_load_count,
       },
       flow: context.flow,
-      primaryReasonCode: context.runningLoads[0]?.reason_code,
-      nextAction: context.runningLoads[0]?.next_action ?? primaryLoad?.next_action,
+      primaryReasonCode: runningLoad?.reason_code,
+      nextAction: runningLoad?.next_action ?? primaryLoad?.next_action,
+      nextActionAt: runningLoad?.next_action_at ?? primaryLoad?.next_action_at,
+      nextActionKind: runningLoad?.next_action_kind ?? primaryLoad?.next_action_kind,
+      nextActionDisplayName: runningLoad?.name ?? primaryLoad?.name,
+      nextActionReasonCode: runningLoad?.next_action_reason_code ?? primaryLoad?.next_action_reason_code,
       targetSummary: context.targetSummary,
     };
   }
@@ -651,6 +701,57 @@ function createHeroPresentation(
     flow: context.flow,
     primaryReasonCode: primaryLoad?.reason_code,
     nextAction: primaryLoad?.next_action,
+    nextActionAt: primaryLoad?.next_action_at,
+    nextActionKind: primaryLoad?.next_action_kind,
+    nextActionDisplayName: primaryLoad?.name,
+    nextActionReasonCode: primaryLoad?.next_action_reason_code,
     targetSummary: context.targetSummary,
   };
+}
+
+function toneForSiteLevel(level: OverviewStatusLevel): OverviewStatusTone {
+  switch (level) {
+    case "critical":
+      return "danger";
+    case "warning":
+      return "warning";
+    case "info":
+      return "info";
+    case "ok":
+      return "success";
+    case "unknown":
+      return "neutral";
+  }
+}
+
+function statusTitleKey(code: string | undefined): MessageKey | undefined {
+  switch (code) {
+    case "needs_attention":
+      return "overview.status.needsAttention";
+    case "watch":
+      return "overview.status.watch";
+    case "controlling":
+      return "overview.status.controlling";
+    case "exporting":
+      return "overview.status.exporting";
+    case "importing":
+      return "overview.status.importing";
+    case "monitoring":
+      return "overview.status.monitoring";
+    default:
+      return undefined;
+  }
+}
+
+function statusSummaryKey(code: string | undefined): MessageKey | undefined {
+  switch (code) {
+    case "attention":
+      return "overview.status.attentionSummary";
+    case "active":
+      return "overview.status.activeSummary";
+    case "monitoring":
+      return "overview.status.monitoringSummary";
+    default:
+      return undefined;
+  }
 }

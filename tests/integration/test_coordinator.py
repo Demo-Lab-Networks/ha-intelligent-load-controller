@@ -311,6 +311,73 @@ async def test_site_summary_attention_includes_backend_target_and_deadline_items
     assert attention == sorted(attention, key=lambda item: item["rank"])
 
 
+async def test_site_summary_exposes_backend_home_status_presentation(
+    hass,
+    load_control_config_entry,
+    load_config,
+    runtime_store,
+) -> None:
+    """Home Status receives backend-owned status, target and next-action metadata."""
+
+    coordinator = SiteCoordinator(hass, load_control_config_entry, runtime_store)
+    await coordinator.async_start()
+    now = datetime.now(UTC)
+    scheduled_at = now + timedelta(hours=1)
+
+    config = dict(load_config)
+    config["display_name"] = "Hot water"
+    config["requirements"] = {
+        "minimum_runtime_s": 1800,
+        "deadline_at": (now + timedelta(hours=6)).isoformat(),
+    }
+    created = await coordinator.async_add_load(config)
+    load_id = created["load_id"]
+    coordinator._last_plan = {  # noqa: SLF001
+        "intervals": [
+            {
+                "load_id": load_id,
+                "start_at": scheduled_at.isoformat(),
+                "end_at": (scheduled_at + timedelta(minutes=30)).isoformat(),
+                "reason_code": "lowest_cost_window",
+            }
+        ],
+        "loads": [
+            {
+                "load_id": load_id,
+                "required_slots": 6,
+                "scheduled_slots": 6,
+                "unmet_slots": 0,
+                "reason_codes": ["plan_selected"],
+            }
+        ],
+    }
+
+    summary = await coordinator.async_site_summary()
+    presentation = summary["presentation"]
+
+    assert presentation["status_level"] == "warning"
+    assert presentation["status_code"] == "watch"
+    assert presentation["summary_code"] == "attention"
+    assert presentation["summary_values"] == {"count": summary["attention_count"]}
+    assert presentation["flow_direction"] == "unknown"
+    assert presentation["target_summary"] == {
+        "total": 1,
+        "complete": 0,
+        "on_track": 1,
+        "at_risk": 0,
+        "impossible": 0,
+        "unknown": 0,
+    }
+    assert presentation["decision_reason_code"] == "input_missing"
+    assert presentation["next_action_at"] == scheduled_at.isoformat()
+    assert presentation["next_action_kind"] == "start"
+    assert presentation["next_action_load_id"] == load_id
+    assert presentation["next_action_display_name"] == "Hot water"
+    assert presentation["next_action_reason_code"] == "lowest_cost_window"
+    assert "grid_import" not in summary
+    assert "grid_export" not in summary
+
+
 async def test_load_list_exposes_backend_card_presentation_fields(
     hass,
     load_control_config_entry,

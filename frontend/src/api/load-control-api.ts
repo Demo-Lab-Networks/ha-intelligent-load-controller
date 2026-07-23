@@ -7,6 +7,7 @@ import type {
   LoadSummary,
   Measurement,
   SiteAttentionItem,
+  SitePresentation,
   SiteSummary,
 } from "../models/dashboard";
 import type { HomeAssistant, HomeAssistantUnsubscribe } from "../types/home-assistant";
@@ -163,6 +164,9 @@ export interface SiteSummaryResponse {
   grid_import?: Measurement;
   grid_export?: Measurement;
   solar_production?: Measurement;
+  phase_a_power?: Measurement;
+  phase_b_power?: Measurement;
+  phase_c_power?: Measurement;
   current_import_price?: SiteSummary["current_import_price"];
   controlled_energy_today?: Measurement;
   controlled_cost_today?: SiteSummary["controlled_cost_today"];
@@ -173,6 +177,7 @@ export interface SiteSummaryResponse {
   warnings?: readonly unknown[];
   attention_count?: number;
   attention?: readonly unknown[];
+  presentation?: unknown;
 }
 
 export interface LoadListItemResponse {
@@ -474,6 +479,9 @@ function normalizeSiteSummary(response: SiteSummaryResponse): SiteSummary {
     grid_import: response.grid_import,
     grid_export: response.grid_export,
     solar_production: response.solar_production,
+    phase_a_power: response.phase_a_power,
+    phase_b_power: response.phase_b_power,
+    phase_c_power: response.phase_c_power,
     controlled_power:
       response.controlled_power ?? measurementFromWatts(response.total_controlled_power_w),
     active_load_count: response.active_load_count ?? response.active_loads ?? 0,
@@ -486,6 +494,7 @@ function normalizeSiteSummary(response: SiteSummaryResponse): SiteSummary {
     updated_at: response.updated_at ?? response.last_replan_at,
     attention_count: response.attention_count,
     attention: normalizeAttentionItems(response.attention),
+    presentation: normalizeSitePresentation(response.presentation),
   };
 }
 
@@ -513,6 +522,49 @@ function normalizeLoadSummary(response: LoadListItemResponse): LoadSummary {
     target_status: response.target_status,
     fault: response.fault ?? state === "fault",
   };
+}
+
+function normalizeSitePresentation(value: unknown): SitePresentation | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const candidate = value as Record<string, unknown>;
+  const result: SitePresentation = {};
+  const level = sitePresentationLevel(candidate["status_level"]);
+  if (level !== undefined) {
+    result.status_level = level;
+  }
+  for (const key of [
+    "status_code",
+    "summary_code",
+    "decision_reason_code",
+    "next_action_at",
+    "next_action_load_id",
+    "next_action_display_name",
+    "next_action_reason_code",
+  ] as const) {
+    const raw = candidate[key];
+    if (typeof raw === "string") {
+      result[key] = raw;
+    }
+  }
+  const flowDirection = siteFlowDirection(candidate["flow_direction"]);
+  if (flowDirection !== undefined) {
+    result.flow_direction = flowDirection;
+  }
+  const summaryValues = stringNumberRecord(candidate["summary_values"]);
+  if (summaryValues !== undefined) {
+    result.summary_values = summaryValues;
+  }
+  const targetSummary = siteTargetSummary(candidate["target_summary"]);
+  if (targetSummary !== undefined) {
+    result.target_summary = targetSummary;
+  }
+  const nextKind = nextActionKind(candidate["next_action_kind"]);
+  if (nextKind !== undefined) {
+    result.next_action_kind = nextKind;
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 function normalizeDailyTimeline(response: DailyTimelineResponse): DailyTimelineResponse {
@@ -601,6 +653,50 @@ function normalizeAttentionItems(value: readonly unknown[] | undefined): readonl
     });
   }
   return items.sort((left, right) => left.rank - right.rank || left.id.localeCompare(right.id));
+}
+
+function sitePresentationLevel(value: unknown): SitePresentation["status_level"] | undefined {
+  return value === "ok" || value === "info" || value === "warning" || value === "critical" || value === "unknown"
+    ? value
+    : undefined;
+}
+
+function siteFlowDirection(value: unknown): SitePresentation["flow_direction"] | undefined {
+  return value === "exporting" || value === "importing" || value === "balanced" || value === "unknown"
+    ? value
+    : undefined;
+}
+
+function stringNumberRecord(value: unknown): Readonly<Record<string, string | number>> | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const result: Record<string, string | number> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (typeof raw === "string" || isFiniteNumber(raw)) {
+      result[key] = raw;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function siteTargetSummary(value: unknown): SitePresentation["target_summary"] | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const candidate = value as Record<string, unknown>;
+  return {
+    total: nonNegativeCount(candidate["total"]),
+    complete: nonNegativeCount(candidate["complete"]),
+    onTrack: nonNegativeCount(candidate["on_track"] ?? candidate["onTrack"]),
+    atRisk: nonNegativeCount(candidate["at_risk"] ?? candidate["atRisk"]),
+    impossible: nonNegativeCount(candidate["impossible"]),
+    unknown: nonNegativeCount(candidate["unknown"]),
+  };
+}
+
+function nonNegativeCount(value: unknown): number {
+  return isFiniteNumber(value) ? Math.max(0, Math.trunc(value)) : 0;
 }
 
 function isFiniteNumber(value: unknown): value is number {

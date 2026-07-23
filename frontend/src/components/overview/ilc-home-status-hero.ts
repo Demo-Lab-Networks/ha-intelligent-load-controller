@@ -52,12 +52,7 @@ export class IlcHomeStatusHero extends LitElement {
             <div>
               <dt>${translate(this.hass, "overview.next")}</dt>
               <dd>
-                ${presentation.nextAction ??
-                (site.next_deadline
-                  ? translate(this.hass, "overview.nextDeadline", {
-                      time: formatDateTime(this.hass, site.next_deadline),
-                    })
-                  : translate(this.hass, "overview.noNextAction"))}
+                ${this.renderNextAction(site, presentation)}
               </dd>
             </div>
             <div>
@@ -114,6 +109,37 @@ export class IlcHomeStatusHero extends LitElement {
       count: summary.complete + summary.onTrack,
       total: summary.total,
     });
+  }
+
+  private renderNextAction(site: SiteSummary, presentation: OverviewHeroPresentation) {
+    if (presentation.nextActionAt) {
+      const values = {
+        time: formatDateTime(this.hass, presentation.nextActionAt),
+        reason: presentation.nextActionReasonCode
+          ? localizeReasonCode(this.hass, presentation.nextActionReasonCode)
+          : translate(this.hass, "value.unavailable"),
+        load: presentation.nextActionDisplayName ?? translate(this.hass, "load.generic"),
+      };
+      if (presentation.nextActionDisplayName) {
+        return translate(
+          this.hass,
+          presentation.nextActionKind === "stop"
+            ? "overview.nextAction.stopForLoad"
+            : "overview.nextAction.startForLoad",
+          values,
+        );
+      }
+      return translate(this.hass, "overview.nextAction.at", values);
+    }
+    if (presentation.nextAction) {
+      return presentation.nextAction;
+    }
+    if (site.next_deadline) {
+      return translate(this.hass, "overview.nextDeadline", {
+        time: formatDateTime(this.hass, site.next_deadline),
+      });
+    }
+    return translate(this.hass, "overview.noNextAction");
   }
 
   private renderHeroValue(label: string, value: string) {

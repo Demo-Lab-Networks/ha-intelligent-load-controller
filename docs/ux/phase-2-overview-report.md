@@ -31,6 +31,7 @@
 - Added backend-owned load summary card fields for measured current power, configured deadline, and the next planned start/stop action from the stored backend plan. The card renders the structured time/kind/reason-code fields and keeps the older raw `next_action` fallback.
 - Added backend-owned load summary target progress and target status fields. Runtime and energy progress come from bounded recovery accounting, SOC/temperature progress comes from observed feedback or persisted feedback evidence, and target risk comes from stored backend plan results/deadline evidence. Missing evidence is surfaced as `unknown` rather than fabricated as on-track.
 - Added a resilient Overview `ilc-today-timeline` component. It renders backend-provided plan intervals as a compact visual strip, keeps a screen-reader/text summary, opens affected loads or the full Plan route, and leaves the dashboard usable when the timeline read is unavailable.
+- Added an optional V1 `site_summary.presentation` payload for the Home Status hero. The backend now supplies stable status/summary codes, summary values, grid-flow direction, target counts for target-bearing loads, the primary decision reason, and the next planned load action/time/reason from stored plan evidence. The panel prefers those fields and falls back to the previous typed-field derivation when they are absent.
 
 No planner, electrical safety, actuator, override, or optimisation semantics were changed.
 
@@ -51,11 +52,12 @@ No planner, electrical safety, actuator, override, or optimisation semantics wer
 | Check | Result |
 | --- | --- |
 | `npm --prefix frontend run typecheck` under Node 22.23.0 | Passed |
-| `npm --prefix frontend run test` under Node 22.23.0 | 7 files passed; 37 tests passed |
+| `npm --prefix frontend run test` under Node 22.23.0 | 8 files passed; 39 tests passed |
 | `npm --prefix frontend run test:e2e` under Node 22.23.0 | 4 Playwright tests passed |
-| `scripts/build-frontend` under Node 22.23.0 and `scripts/validate-frontend-bundle` | Passed; bundle size 1,691,536 bytes |
-| `python3 -m py_compile custom_components/intelligent_load_controller/coordinator.py tests/integration/test_coordinator.py tests/websocket/test_websocket_api.py` | Passed |
-| `scripts/test-backend tests/integration/test_coordinator.py::test_site_summary_attention_includes_backend_target_and_deadline_items -q` | Blocked in this shell: Python 3.13 interpreter unavailable |
+| `npm --prefix frontend run build` under Node 22.23.0 and `scripts/validate-frontend-bundle` | Passed; bundle size 1,697,009 bytes |
+| `python3 -m compileall -q custom_components/intelligent_load_controller tests/integration/test_coordinator.py` | Passed |
+| `RUFF_CACHE_DIR=.tmp-ruff-cache .tmp-ruff/bin/ruff format --check ... && .tmp-ruff/bin/ruff check ...` for touched backend files | Passed |
+| `scripts/test-backend tests/integration/test_coordinator.py -k home_status -q` | Blocked in this shell: no Python 3.13 executable on PATH; direct `python3` is 3.14 and lacks pytest/Home Assistant harness dependencies |
 
 Browser console notes from Playwright:
 
@@ -66,13 +68,14 @@ Browser console notes from Playwright:
 
 | Gate | Assessment |
 | --- | --- |
-| Overview answers the seven five-second questions | Partially satisfied locally: current grid flow, running/waiting loads, target summary, attention, next action/deadline fallback, reason-code explanation, quick actions, and compressed planned intervals are visible. More backend presentation fields and live HAOS evidence remain required. |
+| Overview answers the seven five-second questions | Partially satisfied locally: current grid flow, running/waiting loads, target summary, attention, next planned action/deadline fallback, reason-code explanation, quick actions, and compressed planned intervals are visible. The Home Status hero now prefers backend-owned presentation fields. More tariff/opportunity presentation fields and live HAOS evidence remain required. |
 | No wall of equal-weight metrics remains | Satisfied for this slice: the legacy eleven-card metric wall was replaced with hero, flow, attention, and six focused KPIs. |
 | Every configured load type has an appropriate summary card | Improved but still partial: HWS, EV, battery, and generic cards now have type-aware state phrases, progress labels, badges, measured power/deadline/progress/target-status/next-action fields where backend data exists, and contextual primary actions. Full type-specific fields still depend on future backend presentation models. |
 | Attention states are backend-authoritative | Improved but still partial: warning, override, runtime actuator-fault, invalid-load, target-risk, impossible-target, and approaching-deadline attention now prefer backend-ranked `site_summary.attention[]` with rank/severity/action. Tariff and opportunity attention still need richer backend presentation sources before full Phase 2 exit. |
 
 ## Known limits intentionally carried forward
 
+- The Home Status hero now has a starter backend-owned presentation payload, but it does not yet include richer freshness/source attribution, action eligibility, or full decision narrative fields.
 - The live energy flow uses available aggregate fields and does not yet render canonical backend `energy_flow_nodes[]`/`energy_flow_edges[]`.
 - The attention list now has a backend-ranked warning/override/runtime-fault/invalid-load/target/deadline contract, but it does not yet cover tariff/free-period/solar opportunity categories.
 - The Today timeline is a starter compressed interval strip. It does not yet include tariff bands, solar/export bands, actual/manual/blocked categories, deadline markers, or zoom; those remain Phase 4/plan-workspace items unless backend presentation fields arrive earlier.
@@ -83,7 +86,7 @@ Browser console notes from Playwright:
 
 ## Recommended next work
 
-1. Extend optional backend presentation fields for `site_summary.presentation`, tariff/opportunity `site_summary.attention[]` sources, and richer `load_list` display fields with schema/contract tests.
+1. Extend optional backend presentation fields for tariff/opportunity `site_summary.attention[]` sources, richer `site_summary.presentation` freshness/action-eligibility/narrative fields, and richer `load_list` display fields with schema/contract tests.
 2. Add richer backend presentation categories for timeline intervals (`kind`, source, deadline/actual/manual/blocked markers) before expanding the visual into the full Plan workspace.
 3. Add backend load presentation fields for area/category/circuit metadata, source breakdown, expected completion, boost presets, and action eligibility.
 4. Capture refreshed Overview and Loads screenshots at the required Phase 2 viewports after the fixture/harness can represent HWS, EV, battery, warning, fault, override, timeline, and grouped-catalogue states.

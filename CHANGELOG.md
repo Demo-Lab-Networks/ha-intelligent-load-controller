@@ -20,6 +20,7 @@ All notable changes will be documented here. The project intends to follow [Keep
 - Backend-owned load-card summary fields for measured current power, configured deadline, and structured next planned start/stop action.
 - Backend-owned load-card target progress and target status fields derived from bounded runtime/feedback evidence and stored plan risk.
 - Backend-ranked attention items for impossible targets, at-risk targets, and approaching load deadlines.
+- Optional V1 `site_summary.presentation` backend presentation field for the Home Status hero, including status/summary codes, target counts, grid-flow direction, decision reason, and next planned load action fields.
 
 ### Changed
 
@@ -33,6 +34,7 @@ All notable changes will be documented here. The project intends to follow [Keep
 - Loads page now renders searchable, sortable, filterable grouped catalogue controls over read-only backend load summaries.
 - Load summaries now expose a read-only `fault` flag when persisted runtime fault evidence exists.
 - Load summary cards now prefer structured next-action time/kind/reason fields and keep the legacy raw `next_action` fallback.
+- The Overview Home Status hero now prefers backend-owned presentation fields and keeps the older typed-field derivation as a compatibility fallback.
 
 ### Fixed
 
@@ -40,6 +42,7 @@ All notable changes will be documented here. The project intends to follow [Keep
 - Ensured dark-theme shell backgrounds fill the viewport on short pages.
 - Replaced raw JSON rendering for ordinary Insights daily summaries with labelled fields and a Diagnostics fallback for complex values.
 - Preserved optional site summary measurements in the frontend API facade so grid, solar, cost, energy, and deadline values render when the backend provides them.
+- Added missing frontend reason-code translations for visible planner/site attention codes used by overview explanations.
 
 ## [0.2.0] - Initial 0.2 baseline
 
