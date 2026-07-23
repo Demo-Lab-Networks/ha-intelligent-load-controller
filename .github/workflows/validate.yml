@@ -19,9 +19,9 @@ jobs:
         uses: hacs/action@main
         with:
           category: integration
-          # These are GitHub/brand publication prerequisites, not package checks.
-          # The release check remains intentionally blocked until they are supplied.
-          ignore: brands description images information issues topics
+          # These are GitHub/community-listing prerequisites, not package checks.
+          # Root brand assets are validated in-repo and should not be ignored.
+          ignore: description images information issues topics
   hassfest:
     runs-on: ubuntu-latest
     steps:

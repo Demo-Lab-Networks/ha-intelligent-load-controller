@@ -6,7 +6,8 @@ All notable changes will be documented here. The project intends to follow [Keep
 
 ### Added
 
-- No entries yet.
+- Canonical root `brand/` assets for HACS plus synced integration-local brand assets for Home Assistant 2026.3+.
+- Deterministic brand sync/validation tooling, CI brand checking, and troubleshooting/runbook documentation for icon cache refresh and pre-2026.3 branding limits.
 
 ## [0.2.0] - Initial 0.2 baseline
 

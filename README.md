@@ -10,6 +10,15 @@ The compatibility floor is Home Assistant Core 2025.4.0. The integration uses UI
 
 See [implementation status](docs/IMPLEMENTATION_STATUS.md) for verified development evidence and the remaining release blockers.
 
+## Branding and troubleshooting
+
+Repository-level HACS branding and installed Home Assistant integration branding follow different asset paths. This repository now carries both:
+
+- Root [brand](brand) assets for HACS repository cards and release presentation.
+- Integration-local [brand](custom_components/intelligent_load_controller/brand) assets for Home Assistant 2026.3 and newer.
+
+If an updated icon does not appear immediately, refresh repository information in HACS, redownload the repository, restart Home Assistant, and perform a hard browser refresh. See [Brand assets and verification](docs/BRAND_ASSETS.md) for the compatibility notes, cache-clearing steps, and the HAOS verification runbook.
+
 ## Safety
 
 This software is not electrical protection. Any controlled circuit needs appropriately rated switching equipment; appliance thermostats and safety protection must remain operational. Electrical work must comply with local requirements and be performed by licensed electricians where required. The project does not provide wiring instructions.
