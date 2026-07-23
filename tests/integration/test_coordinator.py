@@ -136,9 +136,7 @@ async def test_site_summary_exposes_backend_ranked_attention_items(
         "load_runtime",
         {},
     )
-    runtime_by_load.setdefault(faulted["load_id"], {})["fault_state"] = (
-        "actuator_unavailable"
-    )
+    runtime_by_load.setdefault(faulted["load_id"], {})["fault_state"] = "actuator_unavailable"
     hass.config_entries.async_add_subentry(
         load_control_config_entry,
         ConfigSubentry(
@@ -150,9 +148,7 @@ async def test_site_summary_exposes_backend_ranked_attention_items(
     )
 
     await coordinator.async_start_override(first["load_id"], "on", indefinite=True)
-    await coordinator.async_start_override(
-        second["load_id"], "off", duration=timedelta(minutes=30)
-    )
+    await coordinator.async_start_override(second["load_id"], "off", duration=timedelta(minutes=30))
 
     summary = await coordinator.async_site_summary()
     attention = summary["attention"]
@@ -206,9 +202,7 @@ async def test_site_summary_exposes_backend_ranked_attention_items(
         },
     }
     listed = await coordinator.async_load_list()
-    assert any(
-        item["load_id"] == faulted["load_id"] and item["fault"] is True for item in listed
-    )
+    assert any(item["load_id"] == faulted["load_id"] and item["fault"] is True for item in listed)
     assert any(
         item["name"] == "Broken load"
         and item["state"] == "fault"

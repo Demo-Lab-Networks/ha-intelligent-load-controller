@@ -2866,9 +2866,7 @@ class SiteCoordinator:
         fault_state = runtime.get("fault_state")
         return fault_state if isinstance(fault_state, str) and fault_state else None
 
-    def _load_summary_presentation(
-        self, config: Mapping[str, Any], load_id: str
-    ) -> dict[str, Any]:
+    def _load_summary_presentation(self, config: Mapping[str, Any], load_id: str) -> dict[str, Any]:
         """Return optional backend-owned fields for load summary cards."""
 
         presentation: dict[str, Any] = {}
