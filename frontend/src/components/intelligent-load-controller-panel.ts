@@ -5,12 +5,13 @@ import "../app/ilc-app-shell";
 import "../app/ilc-navigation";
 import "../components/feedback/ilc-alert";
 import "../components/feedback/ilc-empty-state";
-import "../components/plans/ilc-plan-interval-table";
 import "../pages/ilc-diagnostics-page";
 import "../pages/ilc-insights-page";
+import "../pages/ilc-load-detail-page";
 import "../pages/ilc-loads-page";
 import "../pages/ilc-overview-page";
 import "../pages/ilc-plan-page";
+import "../pages/ilc-settings-page";
 import {
   normaliseBasePath,
   parseIlcRoute,
@@ -30,7 +31,6 @@ import {
   type ValidationIssue,
 } from "../api/load-control-api";
 import { translate } from "../i18n";
-import { localizeReasonCode } from "../i18n/reasons";
 import type { DashboardData, JsonObject, JsonValue, LoadSummary } from "../models/dashboard";
 import type {
   HomeAssistant,
@@ -322,19 +322,54 @@ export class IntelligentLoadControllerPanel extends LitElement {
                 @ilc-replan=${() => void this.replan()}
               ></ilc-plan-page>
             `
-          : this.workspaceView === "history"
-            ? html`
-                <ilc-insights-page
-                  .hass=${this.hass}
-                  .history=${this.history}
-                  .events=${this.events ?? []}
-                ></ilc-insights-page>
-              `
-            : this.workspaceView === "configure"
-              ? this.renderConfiguration()
-              : this.workspaceView === "diagnostics"
-                ? html`<ilc-diagnostics-page .hass=${this.hass} .diagnostics=${this.diagnostics}></ilc-diagnostics-page>`
-              : this.renderLoadControls(dashboard)}
+        : this.workspaceView === "history"
+          ? html`
+              <ilc-insights-page
+                .hass=${this.hass}
+                .history=${this.history}
+                .events=${this.events ?? []}
+              ></ilc-insights-page>
+            `
+        : this.workspaceView === "configure"
+          ? html`
+              <ilc-settings-page
+                .hass=${this.hass}
+                .configuration=${this.configuration}
+                .siteDraft=${this.siteDraft}
+                .loadDraft=${this.loadDraft}
+                .editingLoadId=${this.editingLoadId}
+                .configurationIssues=${this.configurationIssues}
+                .configurationPreview=${this.configurationPreview}
+                .loadTypeOptions=${this.loadTypeOptions()}
+                .optimisationModeOptions=${this.optimisationModeOptions()}
+                @ilc-reload-configuration=${() => void this.reloadConfiguration()}
+                @ilc-save-site=${() => void this.saveSite()}
+                @ilc-save-load=${() => void this.saveLoad()}
+                @ilc-validate-draft=${this.handleValidateDraft}
+                @ilc-preview-draft=${this.handlePreviewDraft}
+                @ilc-draft-change=${this.handleDraftChange}
+                @ilc-start-add-load=${this.startAddingLoad}
+                @ilc-start-edit-load=${this.handleStartEditLoad}
+                @ilc-duplicate-load=${this.handleDuplicateLoad}
+                @ilc-request-delete-load=${this.handleRequestDeleteLoad}
+                @ilc-cancel-load-editor=${this.cancelLoadEditor}
+              ></ilc-settings-page>
+            `
+        : this.workspaceView === "diagnostics"
+          ? html`<ilc-diagnostics-page .hass=${this.hass} .diagnostics=${this.diagnostics}></ilc-diagnostics-page>`
+        : html`
+            <ilc-load-detail-page
+              .hass=${this.hass}
+              .load=${this.selectedLoad(dashboard)}
+              .loadDetail=${this.loadDetail}
+              .overrideDurationMinutes=${this.overrideDurationMinutes}
+              @ilc-back-to-loads=${() => void this.selectWorkspaceView("loads")}
+              @ilc-override-duration-change=${this.handleOverrideDurationChange}
+              @ilc-set-automatic-control=${this.handleSetAutomaticControl}
+              @ilc-start-override=${this.handleStartOverride}
+              @ilc-clear-override=${this.handleClearOverride}
+            ></ilc-load-detail-page>
+          `}
       ${this.renderDeleteConfirmation()}
     `;
   }
@@ -452,407 +487,6 @@ export class IntelligentLoadControllerPanel extends LitElement {
       });
   }
 
-  private renderConfiguration() {
-    const configuration = this.configuration;
-    if (!configuration) {
-      return html`
-        <section class="panel-card empty-state" aria-live="polite">
-          <h2>${translate(this.hass, "app.settings")}</h2>
-          <button class="secondary-button" type="button" @click=${() => void this.reloadConfiguration()}>
-            ${translate(this.hass, "status.retry")}
-          </button>
-        </section>
-      `;
-    }
-
-    const site = this.siteDraft ?? editableCopy(configuration.site);
-    return html`
-      <section class="panel-card" aria-labelledby="site-configuration-title">
-        <div class="section-header">
-          <div>
-            <h2 id="site-configuration-title">${translate(this.hass, "site.configuration")}</h2>
-            <p class="secondary">${translate(this.hass, "status.previewOnly")}</p>
-          </div>
-        </div>
-        <form @submit=${(event: Event) => void this.saveSite(event)}>
-          <div class="form-grid">
-            ${this.renderTextField("site_name", translate(this.hass, "site.name"), site, this.updateSiteDraft)}
-            ${this.renderSelectField(
-              "grid_sign_convention",
-              translate(this.hass, "site.signConvention"),
-              site,
-              ["import_positive", "export_positive"],
-              this.updateSiteDraft,
-            )}
-            ${this.renderNumberField(
-              "planning_horizon_hours",
-              translate(this.hass, "site.planningHorizon"),
-              site,
-              this.updateSiteDraft,
-              false,
-            )}
-            ${this.renderNumberField(
-              "planning_resolution_seconds",
-              translate(this.hass, "site.planningResolution"),
-              site,
-              this.updateSiteDraft,
-              false,
-            )}
-            ${this.renderNumberField(
-              "soft_import_limit_w",
-              translate(this.hass, "site.softImportLimit"),
-              site,
-              this.updateSiteDraft,
-              true,
-            )}
-            ${this.renderNumberField(
-              "hard_import_limit_w",
-              translate(this.hass, "site.hardImportLimit"),
-              site,
-              this.updateSiteDraft,
-              true,
-            )}
-            ${this.renderNumberField(
-              "max_controlled_power_w",
-              translate(this.hass, "site.maxControlledPower"),
-              site,
-              this.updateSiteDraft,
-              true,
-            )}
-          </div>
-          <div class="form-actions">
-            <button class="primary-button" type="submit">${translate(this.hass, "site.save")}</button>
-            <button class="secondary-button" type="button" @click=${() => void this.validateDraft("site")}>
-              ${translate(this.hass, "config.validate")}
-            </button>
-            <button class="secondary-button" type="button" @click=${() => void this.previewDraft("site")}>
-              ${translate(this.hass, "config.preview")}
-            </button>
-          </div>
-        </form>
-        ${this.renderConfigurationFeedback()}
-        <details>
-          <summary>${translate(this.hass, "config.advanced")}</summary>
-          <pre>${JSON.stringify(configuration.site, null, 2)}</pre>
-        </details>
-      </section>
-      <section class="panel-card" aria-labelledby="load-configuration-title">
-        <div class="section-header">
-          <h2 id="load-configuration-title">${translate(this.hass, "load.configuration")}</h2>
-          <button class="secondary-button" type="button" @click=${this.startAddingLoad}>
-            ${translate(this.hass, "load.add")}
-          </button>
-        </div>
-        ${this.renderConfiguredLoads(configuration.loads)}
-        ${this.loadDraft ? this.renderLoadEditor() : nothing}
-      </section>
-    `;
-  }
-
-  private renderConfiguredLoads(loads: readonly JsonObject[]) {
-    if (loads.length === 0) {
-      return html`<p class="secondary">${translate(this.hass, "status.empty")}</p>`;
-    }
-    return html`
-      <div class="load-grid">
-        ${loads.map((config) => {
-          const loadId = stringFrom(config["load_id"]);
-          const displayName = stringFrom(config["display_name"]) ?? loadId ?? "—";
-          return html`
-            <article class="load-card">
-              <h3>${displayName}</h3>
-              <p class="secondary">${stringFrom(config["load_type"]) ?? "—"}</p>
-              <div class="card-actions">
-                <button
-                  class="secondary-button"
-                  type="button"
-                  ?disabled=${!loadId}
-                  @click=${() => this.startEditingLoad(config)}
-                >
-                  ${translate(this.hass, "load.edit")}
-                </button>
-                <button
-                  class="text-button"
-                  type="button"
-                  ?disabled=${!loadId}
-                  @click=${() => void this.duplicateConfiguredLoad(config)}
-                >
-                  ${translate(this.hass, "load.duplicate")}
-                </button>
-                <button
-                  class="danger-button"
-                  type="button"
-                  ?disabled=${!loadId}
-                  @click=${(event: Event) => this.requestDeleteLoad(config, displayName, event.currentTarget)}
-                >
-                  ${translate(this.hass, "load.delete")}
-                </button>
-              </div>
-            </article>
-          `;
-        })}
-      </div>
-    `;
-  }
-
-  private renderLoadEditor() {
-    const load = this.loadDraft;
-    if (!load) {
-      return nothing;
-    }
-    const editing = this.editingLoadId !== undefined;
-    return html`
-      <section class="panel-card" aria-labelledby="load-editor-title">
-        <div class="section-header">
-          <h3 id="load-editor-title">${editing ? translate(this.hass, "load.edit") : translate(this.hass, "load.add")}</h3>
-          <button class="text-button" type="button" @click=${this.cancelLoadEditor}>
-            ${translate(this.hass, "load.cancelEdit")}
-          </button>
-        </div>
-        <form @submit=${(event: Event) => void this.saveLoad(event)}>
-          <div class="form-grid">
-            ${this.renderTextField("display_name", translate(this.hass, "load.name"), load, this.updateLoadDraft)}
-            ${this.renderSelectField(
-              "load_type",
-              translate(this.hass, "load.type"),
-              load,
-              this.loadTypeOptions(),
-              this.updateLoadDraft,
-            )}
-            ${this.renderSelectField(
-              "optimisation_mode",
-              translate(this.hass, "load.optimisation"),
-              load,
-              this.optimisationModeOptions(),
-              this.updateLoadDraft,
-            )}
-            ${this.renderNumberField(
-              "expected_power_w",
-              translate(this.hass, "load.expectedPower"),
-              load,
-              this.updateLoadDraft,
-              false,
-            )}
-            ${this.renderNumberField(
-              "priority",
-              translate(this.hass, "load.priority"),
-              load,
-              this.updateLoadDraft,
-              false,
-            )}
-            ${this.renderSelectField(
-              "phase_assignment",
-              translate(this.hass, "load.phase"),
-              load,
-              ["unknown", "a", "b", "c", "three_phase"],
-              this.updateLoadDraft,
-            )}
-            ${this.renderCheckboxField(
-              "automatic_control",
-              translate(this.hass, "load.automatic"),
-              load,
-              this.updateLoadDraft,
-            )}
-          </div>
-          <div class="form-actions">
-            <button class="primary-button" type="submit">${translate(this.hass, "load.save")}</button>
-            <button class="secondary-button" type="button" @click=${() => void this.validateDraft("load")}>
-              ${translate(this.hass, "config.validate")}
-            </button>
-            <button class="secondary-button" type="button" @click=${() => void this.previewDraft("load")}>
-              ${translate(this.hass, "config.preview")}
-            </button>
-          </div>
-        </form>
-        ${this.renderConfigurationFeedback()}
-      </section>
-    `;
-  }
-
-  private renderTextField(
-    name: string,
-    label: string,
-    config: EditableConfig,
-    onInput: (event: Event) => void,
-  ) {
-    return html`
-      <label class="form-field">
-        <span>${label}</span>
-        <input name=${name} .value=${stringFrom(config[name]) ?? ""} @input=${onInput} />
-      </label>
-    `;
-  }
-
-  private renderNumberField(
-    name: string,
-    label: string,
-    config: EditableConfig,
-    onInput: (event: Event) => void,
-    nullable: boolean,
-  ) {
-    return html`
-      <label class="form-field">
-        <span>${label}</span>
-        <input
-          name=${name}
-          type="number"
-          inputmode="decimal"
-          .value=${numberText(config[name])}
-          data-nullable=${String(nullable)}
-          @input=${onInput}
-        />
-      </label>
-    `;
-  }
-
-  private renderSelectField(
-    name: string,
-    label: string,
-    config: EditableConfig,
-    options: readonly string[],
-    onChange: (event: Event) => void,
-  ) {
-    const current = stringFrom(config[name]) ?? options[0] ?? "";
-    return html`
-      <label class="form-field">
-        <span>${label}</span>
-        <select name=${name} .value=${current} @change=${onChange}>
-          ${options.map((option) => html`<option value=${option}>${option}</option>`)}
-        </select>
-      </label>
-    `;
-  }
-
-  private renderCheckboxField(
-    name: string,
-    label: string,
-    config: EditableConfig,
-    onChange: (event: Event) => void,
-  ) {
-    return html`
-      <label class="checkbox-field">
-        <input name=${name} type="checkbox" ?checked=${booleanFrom(config[name], true)} @change=${onChange} />
-        <span>${label}</span>
-      </label>
-    `;
-  }
-
-  private renderConfigurationFeedback() {
-    const preview = this.configurationPreview;
-    if (this.configurationIssues.length === 0 && !preview) {
-      return nothing;
-    }
-    return html`
-      ${this.configurationIssues.length > 0
-        ? html`
-            <section class="status-banner" data-state="error" aria-live="polite">
-              <h3>${translate(this.hass, "config.issues")}</h3>
-              <ul class="issue-list">
-                ${this.configurationIssues.map(
-                  (issue) => html`
-                    <li>
-                      <span>${issue.message}</span>
-                      <span class="issue-path">${issue.path}</span>
-                    </li>
-                  `,
-                )}
-              </ul>
-            </section>
-          `
-        : nothing}
-      ${preview
-        ? html`
-            <section class="panel-card" aria-labelledby="preview-result-title">
-              <h3 id="preview-result-title">${translate(this.hass, "config.previewResult")}</h3>
-              <p class="secondary">${translate(this.hass, "status.previewOnly")}</p>
-              ${preview.plan
-                ? html`
-                    <ilc-plan-interval-table
-                      .hass=${this.hass}
-                      .intervals=${preview.plan.intervals ?? []}
-                    ></ilc-plan-interval-table>
-                  `
-                : nothing}
-            </section>
-          `
-        : nothing}
-    `;
-  }
-
-  private renderLoadControls(dashboard: DashboardData) {
-    const load = dashboard.loads.find((candidate) => candidate.load_id === this.selectedLoadId);
-    if (!load) {
-      return html`
-        <section class="panel-card empty-state" aria-live="polite">
-          <h2>${translate(this.hass, "load.details")}</h2>
-          <p class="secondary">${translate(this.hass, "value.unavailable")}</p>
-          <button class="secondary-button" type="button" @click=${() => void this.selectWorkspaceView("loads")}>
-            ${translate(this.hass, "nav.loads")}
-          </button>
-        </section>
-      `;
-    }
-    return html`
-      <section class="panel-card" aria-labelledby="load-controls-title">
-        <div class="section-header">
-          <div>
-            <h2 id="load-controls-title">${load.name}</h2>
-            <p class="secondary">${translate(this.hass, "load.details")}</p>
-          </div>
-          <button class="text-button" type="button" @click=${() => void this.selectWorkspaceView("loads")}>
-            ${translate(this.hass, "nav.loads")}
-          </button>
-        </div>
-        <p class="reason">${localizeReasonCode(this.hass, load.reason_code)}</p>
-        <label class="form-field">
-          <span>${translate(this.hass, "load.duration")}</span>
-          <input
-            type="number"
-            min="1"
-            inputmode="numeric"
-            .value=${String(this.overrideDurationMinutes)}
-            @input=${this.updateOverrideDuration}
-          />
-        </label>
-        <div class="override-actions">
-          <button
-            class="secondary-button"
-            type="button"
-            @click=${() => void this.setAutomaticControl(load, !load.automatic_control)}
-          >
-            ${translate(
-              this.hass,
-              load.automatic_control ? "load.disableAutomatic" : "load.enableAutomatic",
-            )}
-          </button>
-          <button class="primary-button" type="button" @click=${() => void this.applyOverride(load.load_id, "on", false)}>
-            ${translate(this.hass, "load.timedOn")}
-          </button>
-          <button class="secondary-button" type="button" @click=${() => void this.applyOverride(load.load_id, "off", false)}>
-            ${translate(this.hass, "load.timedOff")}
-          </button>
-          <button class="secondary-button" type="button" @click=${() => void this.applyOverride(load.load_id, "on", true)}>
-            ${translate(this.hass, "load.indefiniteOn")}
-          </button>
-          <button class="secondary-button" type="button" @click=${() => void this.applyOverride(load.load_id, "off", true)}>
-            ${translate(this.hass, "load.indefiniteOff")}
-          </button>
-          <button class="danger-button" type="button" @click=${() => void this.clearLoadOverride(load.load_id)}>
-            ${translate(this.hass, "load.clearOverride")}
-          </button>
-        </div>
-        ${this.loadDetail
-          ? html`
-              <details>
-                <summary>${translate(this.hass, "config.advanced")}</summary>
-                <pre>${JSON.stringify(this.loadDetail, null, 2)}</pre>
-              </details>
-            `
-          : nothing}
-      </section>
-    `;
-  }
-
   private renderDeleteConfirmation() {
     const confirmation = this.deleteConfirmation;
     if (!confirmation) {
@@ -906,6 +540,103 @@ export class IntelligentLoadControllerPanel extends LitElement {
       return;
     }
     void this.editConfiguredLoad(loadId);
+  };
+
+  private readonly handleOverrideDurationChange = (event: Event): void => {
+    const minutes = (event as CustomEvent<{ minutes?: number }>).detail?.minutes;
+    this.overrideDurationMinutes = typeof minutes === "number" && Number.isFinite(minutes) ? minutes : 0;
+  };
+
+  private readonly handleSetAutomaticControl = (event: Event): void => {
+    const detail = (event as CustomEvent<{ load?: LoadSummary; enabled?: boolean }>).detail;
+    if (!detail?.load || typeof detail.enabled !== "boolean") {
+      return;
+    }
+    void this.setAutomaticControl(detail.load, detail.enabled);
+  };
+
+  private readonly handleStartOverride = (event: Event): void => {
+    const detail = (event as CustomEvent<{ loadId?: string; desiredState?: "on" | "off"; indefinite?: boolean }>).detail;
+    if (!detail?.loadId || (detail.desiredState !== "on" && detail.desiredState !== "off")) {
+      return;
+    }
+    void this.applyOverride(detail.loadId, detail.desiredState, detail.indefinite === true);
+  };
+
+  private readonly handleClearOverride = (event: Event): void => {
+    const loadId = (event as CustomEvent<{ loadId?: string }>).detail?.loadId;
+    if (!loadId) {
+      return;
+    }
+    void this.clearLoadOverride(loadId);
+  };
+
+  private selectedLoad(dashboard: DashboardData): LoadSummary | undefined {
+    return dashboard.loads.find((candidate) => candidate.load_id === this.selectedLoadId);
+  }
+
+  private readonly handleValidateDraft = (event: Event): void => {
+    const kind = (event as CustomEvent<{ kind?: "site" | "load" }>).detail?.kind;
+    if (kind !== "site" && kind !== "load") {
+      return;
+    }
+    void this.validateDraft(kind);
+  };
+
+  private readonly handlePreviewDraft = (event: Event): void => {
+    const kind = (event as CustomEvent<{ kind?: "site" | "load" }>).detail?.kind;
+    if (kind !== "site" && kind !== "load") {
+      return;
+    }
+    void this.previewDraft(kind);
+  };
+
+  private readonly handleDraftChange = (event: Event): void => {
+    const detail = (event as CustomEvent<{ kind?: "site" | "load"; name?: string; value?: JsonValue }>).detail;
+    if ((detail.kind !== "site" && detail.kind !== "load") || !detail.name || !("value" in detail)) {
+      return;
+    }
+    const current = detail.kind === "site" ? this.siteDraft : this.loadDraft;
+    if (!current) {
+      return;
+    }
+    const value = detail.value as JsonValue;
+    const next: EditableConfig = { ...current, [detail.name]: value };
+    if (detail.kind === "site") {
+      this.siteDraft = next;
+    } else {
+      this.loadDraft = next;
+    }
+    this.configurationIssues = [];
+    this.configurationPreview = undefined;
+  };
+
+  private readonly handleStartEditLoad = (event: Event): void => {
+    const config = (event as CustomEvent<{ config?: JsonObject }>).detail?.config;
+    if (!config) {
+      return;
+    }
+    this.startEditingLoad(config);
+  };
+
+  private readonly handleDuplicateLoad = (event: Event): void => {
+    const config = (event as CustomEvent<{ config?: JsonObject }>).detail?.config;
+    if (!config) {
+      return;
+    }
+    void this.duplicateConfiguredLoad(config);
+  };
+
+  private readonly handleRequestDeleteLoad = (event: Event): void => {
+    const detail = (event as CustomEvent<{
+      config?: JsonObject;
+      displayName?: string;
+      trigger?: EventTarget | null;
+    }>).detail;
+    if (!detail?.config || !detail.displayName) {
+      return;
+    }
+    this.requestDeleteLoad(detail.config, detail.displayName, detail.trigger ?? null);
   };
 
   private async selectWorkspaceView(view: WorkspaceView, pushRoute = true): Promise<void> {
@@ -1059,8 +790,8 @@ export class IntelligentLoadControllerPanel extends LitElement {
     }
   }
 
-  private async saveSite(event: Event): Promise<void> {
-    event.preventDefault();
+  private async saveSite(event?: Event): Promise<void> {
+    event?.preventDefault();
     const entryId = this.selectedEntryId;
     const draft = this.siteDraft;
     const current = this.configuration?.site;
@@ -1111,8 +842,8 @@ export class IntelligentLoadControllerPanel extends LitElement {
     this.configurationPreview = undefined;
   };
 
-  private async saveLoad(event: Event): Promise<void> {
-    event.preventDefault();
+  private async saveLoad(event?: Event): Promise<void> {
+    event?.preventDefault();
     const entryId = this.selectedEntryId;
     const draft = this.loadDraft;
     const editingLoadId = this.editingLoadId;
@@ -1205,45 +936,6 @@ export class IntelligentLoadControllerPanel extends LitElement {
     }
   }
 
-  private readonly updateSiteDraft = (event: Event): void => {
-    if (!this.siteDraft) {
-      return;
-    }
-    this.siteDraft = this.updatedDraft(this.siteDraft, event);
-    this.configurationIssues = [];
-    this.configurationPreview = undefined;
-  };
-
-  private readonly updateLoadDraft = (event: Event): void => {
-    if (!this.loadDraft) {
-      return;
-    }
-    this.loadDraft = this.updatedDraft(this.loadDraft, event);
-    this.configurationIssues = [];
-    this.configurationPreview = undefined;
-  };
-
-  private updatedDraft(current: EditableConfig, event: Event): EditableConfig {
-    const target = event.currentTarget;
-    if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) {
-      return current;
-    }
-    let value: JsonValue;
-    if (target instanceof HTMLInputElement && target.type === "checkbox") {
-      value = target.checked;
-    } else if (target instanceof HTMLInputElement && target.type === "number") {
-      if (target.value === "") {
-        value = target.dataset["nullable"] === "true" ? null : "";
-      } else {
-        const numericValue = Number(target.value);
-        value = Number.isFinite(numericValue) ? numericValue : target.value;
-      }
-    } else {
-      value = target.value;
-    }
-    return { ...current, [target.name]: value };
-  }
-
   private async openLoad(loadId: string): Promise<void> {
     this.selectedLoadId = loadId;
     this.workspaceView = "load";
@@ -1259,12 +951,6 @@ export class IntelligentLoadControllerPanel extends LitElement {
       this.startEditingLoad(config);
     }
   }
-
-  private readonly updateOverrideDuration = (event: Event): void => {
-    const target = event.currentTarget as HTMLInputElement;
-    const minutes = Number(target.value);
-    this.overrideDurationMinutes = Number.isFinite(minutes) ? minutes : 0;
-  };
 
   private async applyOverride(
     loadId: string,
@@ -1615,14 +1301,6 @@ function editableCopy(config: JsonObject): EditableConfig {
 
 function stringFrom(value: JsonValue | undefined): string | undefined {
   return typeof value === "string" ? value : undefined;
-}
-
-function booleanFrom(value: JsonValue | undefined, fallback: boolean): boolean {
-  return typeof value === "boolean" ? value : fallback;
-}
-
-function numberText(value: JsonValue | undefined): string {
-  return typeof value === "number" && Number.isFinite(value) ? String(value) : "";
 }
 
 function revisionFrom(config: JsonObject): number {

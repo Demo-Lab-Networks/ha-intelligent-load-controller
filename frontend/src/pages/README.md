@@ -2,6 +2,8 @@
 
 Phase 1 starts moving route-level presentation out of the root panel.
 
+Current page modules cover Overview, Loads, load detail, Plan, Insights, Settings, and Diagnostics. The root panel remains responsible for Home Assistant/API orchestration while this migration is underway.
+
 Page components should:
 
 - render one route-level view;
