@@ -16,7 +16,9 @@ PNG_SIGNATURE: Final = b"\x89PNG\r\n\x1a\n"
 IHDR_COLOR_TYPE_ALPHA: Final = {4, 6}
 ROOT = Path(__file__).resolve().parent.parent
 CANONICAL_BRAND_DIR = ROOT / "brand"
-INTEGRATION_BRAND_DIR = ROOT / "custom_components" / "intelligent_load_controller" / "brand"
+INTEGRATION_BRAND_DIR = (
+    ROOT / "custom_components" / "intelligent_load_controller" / "brand"
+)
 REQUIRED_CANONICAL = ("icon.png", "logo.png")
 
 
@@ -91,9 +93,7 @@ def validate_assets() -> list[str]:
     logo = canonical_map.get("logo.png")
     if icon is not None:
         if icon.width != icon.height:
-            errors.append(
-                f"brand/icon.png must be square, found {icon.width}x{icon.height}."
-            )
+            errors.append(f"brand/icon.png must be square, found {icon.width}x{icon.height}.")
         if icon.width < 64 or icon.height < 64:
             errors.append(
                 f"brand/icon.png dimensions are unreasonably small: {icon.width}x{icon.height}."
@@ -135,7 +135,8 @@ def validate_assets() -> list[str]:
         destination_info = _read_png_info(destination)
         if source_info.sha256 != destination_info.sha256:
             errors.append(
-                f"Synced brand asset mismatch for {name}: root and integration copies differ."
+                f"Synced brand asset mismatch for {name}: "
+                "root and integration copies differ."
             )
 
     return errors
@@ -156,7 +157,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    subparsers.add_parser("sync", help="Copy canonical root brand assets into the integration.")
+    subparsers.add_parser(
+        "sync", help="Copy canonical root brand assets into the integration."
+    )
     subparsers.add_parser("validate", help="Validate canonical and synced brand assets.")
     subparsers.add_parser("inventory", help="Print PNG dimensions, sizes, and hashes.")
     return parser
