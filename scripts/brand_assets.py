@@ -93,7 +93,9 @@ def validate_assets() -> list[str]:
     logo = canonical_map.get("logo.png")
     if icon is not None:
         if icon.width != icon.height:
-            errors.append(f"brand/icon.png must be square, found {icon.width}x{icon.height}.")
+            errors.append(
+                f"brand/icon.png must be square, found {icon.width}x{icon.height}."
+            )
         if icon.width < 64 or icon.height < 64:
             errors.append(
                 f"brand/icon.png dimensions are unreasonably small: {icon.width}x{icon.height}."
