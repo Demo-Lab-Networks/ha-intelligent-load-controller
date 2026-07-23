@@ -2,33 +2,37 @@
 
 ## Root cause
 
-The original HACS placeholder was caused by a path mismatch:
+The original branding gap was caused by missing local brand paths and a HACS CDN fallback:
 
-- HACS reads repository branding from the repository-root `brand/` directory and expects at least `brand/icon.png`.
+- Current HACS validation accepts local brand assets at `brand/icon.png` when `content_in_root` is true, or under the downloaded integration path otherwise.
+- Some HACS UI/update surfaces still build integration image URLs from `https://brands.home-assistant.io/_/<domain>/icon.png`.
 - The repository only had integration-local files under `custom_components/intelligent_load_controller/brand/`.
 
 That meant:
 
-- HACS could not find repository branding and showed the generic placeholder.
+- HACS package validation had no repository-root local brand asset to validate.
+- HACS UI surfaces that still use the Home Assistant brands CDN can continue showing the generic placeholder until the domain is available through the brands CDN or HACS changes that display path.
 - Home Assistant versions before 2026.3 could not use the integration-local files either, because local custom-integration branding was added in Home Assistant 2026.3.
 
 The previous asset set also had a quality gap:
 
 - `icon.png` and `logo.png` were byte-identical square PNGs, so the repository did not actually have a distinct landscape logo asset.
-- The existing CI workflow ignored the HACS `brands` check, so this path was never validated automatically.
+- The existing CI workflow ignored root brand assets, so local brand packaging was not validated automatically by this repository's own tests.
 
 ## Compatibility findings
 
 | Consumer | Required asset path | Current outcome |
 | --- | --- | --- |
-| HACS repository card/detail | `brand/icon.png` and optional related root assets | Supported by this repository fix |
+| HACS package validation | `brand/icon.png` when `content_in_root` is true | Supported by this repository fix |
+| HACS UI surfaces that use the Home Assistant brands CDN | Central `home-assistant/brands` entry for `custom_integrations/intelligent_load_controller/` | Still an external prerequisite unless HACS changes that display path |
 | Home Assistant 2026.3+ installed custom integration branding | `custom_components/intelligent_load_controller/brand/` | Supported by this repository fix |
 | Home Assistant 2025.4.0 through 2026.2.x installed integration branding | Central `home-assistant/brands` submission for `custom_integrations/intelligent_load_controller/` | Still an external prerequisite |
 
 Outcome adopted for this repository:
 
-1. Root HACS branding plus integration-local branding solves HACS and Home Assistant 2026.3+.
-2. For the advertised compatibility floor older than 2026.3, a central `home-assistant/brands` submission is still required if you want the installed integration icon to appear in the built-in Home Assistant brand surfaces on those older versions.
+1. Root branding plus integration-local branding makes the downloaded repository complete and passes current HACS package validation.
+2. Home Assistant 2026.3+ can serve the installed custom integration icon from the integration-local `brand/` directory.
+3. A central `home-assistant/brands` submission is still required for Home Assistant versions before 2026.3 and for any HACS UI surface that continues to fetch from the brands CDN.
 
 No external pull request has been created by this repository change.
 
@@ -66,9 +70,8 @@ Do not use symlinks. HACS downloads, GitHub release archives, and Windows develo
    - `/config/custom_components/intelligent_load_controller/brand/logo.png`
 5. Refresh HACS repository information. Remove and re-add the custom repository only if normal refresh does not update the cached metadata.
 6. Perform a hard browser refresh.
-7. Verify the icon appears:
-   - In the HACS repository listing.
-   - On the HACS repository detail page.
+7. Verify the local downloaded assets and current UI behavior:
+   - In HACS repository listing and detail pages, note whether the icon appears or whether HACS still serves the brands-CDN placeholder.
    - In `Settings > Devices & services`.
    - In the add-integration search result.
 8. While authenticated, verify Home Assistant returns the real PNG rather than a placeholder:
@@ -90,11 +93,11 @@ If the icon still shows the old placeholder after an update:
 - Restart Home Assistant.
 - Perform a hard browser refresh.
 
-HACS repository imagery and Home Assistant brand surfaces can continue showing cached placeholders until both the downloaded files and the browser/session caches are refreshed.
+HACS repository imagery and Home Assistant brand surfaces can continue showing cached placeholders until both the downloaded files and the browser/session caches are refreshed. If a HACS surface is still using `brands.home-assistant.io/_/intelligent_load_controller/icon.png`, the placeholder will remain until a central brands entry exists or HACS supports the local brand path for that surface.
 
 ## External prerequisite for older Home Assistant versions
 
-Because this project still advertises Home Assistant 2025.4.0 compatibility, a future submission to `home-assistant/brands` is still needed for pre-2026.3 installed-integration icon coverage.
+Because this project still advertises Home Assistant 2025.4.0 compatibility, a future submission to `home-assistant/brands` is still needed for pre-2026.3 installed-integration icon coverage and for HACS surfaces that still fetch CDN brand URLs.
 
 Prepare that submission from the canonical root assets in this repository:
 
