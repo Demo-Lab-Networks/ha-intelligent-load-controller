@@ -5,7 +5,12 @@ import "../app/ilc-app-shell";
 import "../app/ilc-navigation";
 import "../components/feedback/ilc-alert";
 import "../components/feedback/ilc-empty-state";
-import "../components/status/ilc-status-pill";
+import "../components/plans/ilc-plan-interval-table";
+import "../pages/ilc-diagnostics-page";
+import "../pages/ilc-insights-page";
+import "../pages/ilc-loads-page";
+import "../pages/ilc-overview-page";
+import "../pages/ilc-plan-page";
 import {
   normaliseBasePath,
   parseIlcRoute,
@@ -21,20 +26,12 @@ import {
   type DailyTimelineResponse,
   type EventJournalEntry,
   type HistoricalSummaryResponse,
-  type PlanIntervalResponse,
   type SiteSummaryResponse,
   type ValidationIssue,
 } from "../api/load-control-api";
 import { translate } from "../i18n";
-import { localizeControllerState, localizeReasonCode } from "../i18n/reasons";
-import type {
-  DashboardData,
-  JsonObject,
-  JsonValue,
-  LoadProgress,
-  LoadSummary,
-  SiteSummary,
-} from "../models/dashboard";
+import { localizeReasonCode } from "../i18n/reasons";
+import type { DashboardData, JsonObject, JsonValue, LoadSummary } from "../models/dashboard";
 import type {
   HomeAssistant,
   HomeAssistantUnsubscribe,
@@ -42,7 +39,6 @@ import type {
   PanelRoute,
 } from "../types/home-assistant";
 import { panelStyles } from "../styles/panel";
-import { formatCurrencyRate, formatDateTime, formatMeasurement } from "../utils/format";
 
 type ViewState = "loading" | "reconnecting" | "error" | "no_sites" | "select_site" | "empty" | "ready";
 type ChartComponentState = "loading" | "ready" | "failed";
@@ -299,17 +295,45 @@ export class IntelligentLoadControllerPanel extends LitElement {
       ${this.renderActionStatus()}
       ${this.sectionLoading === this.workspaceView ? this.renderSectionLoading() : nothing}
       ${this.workspaceView === "dashboard"
-        ? this.renderDashboard(dashboard)
+        ? html`
+            <ilc-overview-page
+              .hass=${this.hass}
+              .dashboard=${dashboard}
+              .chartComponentState=${this.chartComponentState}
+              @ilc-open-load=${this.handleOpenLoad}
+              @ilc-edit-load=${this.handleEditLoad}
+            ></ilc-overview-page>
+          `
         : this.workspaceView === "loads"
-          ? this.renderLoads(dashboard)
+          ? html`
+              <ilc-loads-page
+                .hass=${this.hass}
+                .loads=${dashboard.loads}
+                @ilc-open-load=${this.handleOpenLoad}
+                @ilc-edit-load=${this.handleEditLoad}
+              ></ilc-loads-page>
+            `
         : this.workspaceView === "plan"
-          ? this.renderPlan()
+          ? html`
+              <ilc-plan-page
+                .hass=${this.hass}
+                .plan=${this.currentPlan}
+                .timeline=${this.dailyTimeline}
+                @ilc-replan=${() => void this.replan()}
+              ></ilc-plan-page>
+            `
           : this.workspaceView === "history"
-            ? this.renderHistory()
+            ? html`
+                <ilc-insights-page
+                  .hass=${this.hass}
+                  .history=${this.history}
+                  .events=${this.events ?? []}
+                ></ilc-insights-page>
+              `
             : this.workspaceView === "configure"
               ? this.renderConfiguration()
               : this.workspaceView === "diagnostics"
-                ? this.renderDiagnostics()
+                ? html`<ilc-diagnostics-page .hass=${this.hass} .diagnostics=${this.diagnostics}></ilc-diagnostics-page>`
               : this.renderLoadControls(dashboard)}
       ${this.renderDeleteConfirmation()}
     `;
@@ -380,15 +404,6 @@ export class IntelligentLoadControllerPanel extends LitElement {
     `;
   }
 
-  private renderEmpty() {
-    return html`
-      <ilc-empty-state
-        .heading=${translate(this.hass, "status.empty")}
-        .message=${translate(this.hass, "status.emptyHint")}
-      ></ilc-empty-state>
-    `;
-  }
-
   private renderNoSites() {
     return html`
       <ilc-empty-state
@@ -422,95 +437,6 @@ export class IntelligentLoadControllerPanel extends LitElement {
     `;
   }
 
-  private renderDashboard(dashboard: DashboardData) {
-    return html`
-      ${this.renderMetrics(dashboard.site)}
-      <section class="panel-card" aria-labelledby="snapshot-title">
-        <div class="section-header">
-          <div>
-            <h2 id="snapshot-title">${translate(this.hass, "site.snapshot")}</h2>
-            <p class="secondary">${translate(this.hass, "site.snapshotDescription")}</p>
-          </div>
-        </div>
-        ${this.renderSnapshotChart(dashboard.site)}
-      </section>
-      <section aria-labelledby="loads-title">
-        <div class="section-header">
-          <h2 id="loads-title">${translate(this.hass, "load.list")}</h2>
-          <span class="secondary">${dashboard.loads.length}</span>
-        </div>
-        ${dashboard.loads.length === 0
-          ? this.renderEmpty()
-          : html`<div class="load-grid">
-              ${dashboard.loads.map((load) => this.renderLoadCard(load))}
-            </div>`}
-      </section>
-      <p class="updated" aria-live="polite">
-        ${translate(this.hass, "status.updated", {
-          time: formatDateTime(this.hass, dashboard.site.updated_at),
-        })}
-      </p>
-    `;
-  }
-
-  private renderLoads(dashboard: DashboardData) {
-    return html`
-      <section aria-labelledby="loads-catalogue-title">
-        <div class="section-header">
-          <div>
-            <h2 id="loads-catalogue-title">${translate(this.hass, "load.catalogue")}</h2>
-            <p class="secondary">${translate(this.hass, "load.catalogueHint")}</p>
-          </div>
-          <span class="secondary">${dashboard.loads.length}</span>
-        </div>
-        ${dashboard.loads.length === 0
-          ? this.renderEmpty()
-          : html`<div class="load-grid">
-              ${dashboard.loads.map((load) => this.renderLoadCard(load))}
-            </div>`}
-      </section>
-    `;
-  }
-
-  private renderSnapshotChart(site: SiteSummary) {
-    if (this.chartComponentState === "ready") {
-      return html`<ilc-site-snapshot-chart .hass=${this.hass} .site=${site}></ilc-site-snapshot-chart>`;
-    }
-
-    const message =
-      this.chartComponentState === "failed"
-        ? translate(this.hass, "site.snapshotChartUnavailable")
-        : translate(this.hass, "site.snapshotChartLoading");
-    return html`
-      <div class="chart-fallback" role="status" aria-live="polite">
-        <p class="secondary">${message}</p>
-        <div class="metric-grid" aria-label=${translate(this.hass, "site.metrics")}>
-          ${this.renderSnapshotMetric(translate(this.hass, "site.import"), formatMeasurement(this.hass, site.grid_import))}
-          ${this.renderSnapshotMetric(translate(this.hass, "site.export"), formatMeasurement(this.hass, site.grid_export))}
-          ${this.renderSnapshotMetric(
-            translate(this.hass, "site.solar"),
-            formatMeasurement(this.hass, site.solar_production),
-          )}
-          ${this.renderSnapshotMetric(
-            translate(this.hass, "site.controlled"),
-            formatMeasurement(this.hass, site.controlled_power),
-          )}
-        </div>
-      </div>
-    `;
-  }
-
-  private renderSnapshotMetric(label: string, value: string) {
-    return html`
-      <div class="panel-card metric">
-        <dl>
-          <dt>${label}</dt>
-          <dd>${value}</dd>
-        </dl>
-      </div>
-    `;
-  }
-
   private loadChartComponent(): void {
     if (this.chartComponentState === "ready" || this.chartComponentLoad) {
       return;
@@ -524,349 +450,6 @@ export class IntelligentLoadControllerPanel extends LitElement {
         console.warn("Load Control chart component failed to load; keeping textual fallback visible.", error);
         this.chartComponentState = "failed";
       });
-  }
-
-  private renderMetrics(site: SiteSummary) {
-    const metrics: ReadonlyArray<readonly [string, string]> = [
-      [translate(this.hass, "site.import"), formatMeasurement(this.hass, site.grid_import)],
-      [translate(this.hass, "site.export"), formatMeasurement(this.hass, site.grid_export)],
-      [translate(this.hass, "site.solar"), formatMeasurement(this.hass, site.solar_production)],
-      [translate(this.hass, "site.controlled"), formatMeasurement(this.hass, site.controlled_power)],
-      [translate(this.hass, "site.activeLoads"), String(site.active_load_count)],
-      [translate(this.hass, "site.waitingLoads"), String(site.waiting_load_count)],
-      [translate(this.hass, "site.price"), formatCurrencyRate(this.hass, site.current_import_price)],
-      [translate(this.hass, "site.costToday"), formatCurrencyRate(this.hass, site.controlled_cost_today)],
-      [translate(this.hass, "site.energyToday"), formatMeasurement(this.hass, site.controlled_energy_today)],
-      [translate(this.hass, "site.nextDeadline"), formatDateTime(this.hass, site.next_deadline)],
-      [translate(this.hass, "site.health"), this.localizeHealth(site.health)],
-    ];
-
-    return html`
-      <section aria-labelledby="metrics-title">
-        <div class="section-header">
-          <h2 id="metrics-title">${translate(this.hass, "site.metrics")}</h2>
-        </div>
-        <div class="metric-grid">
-          ${metrics.map(
-            ([label, value]) => html`
-              <div class="panel-card metric">
-                <dl>
-                  <dt>${label}</dt>
-                  <dd>${value}</dd>
-                </dl>
-              </div>
-            `,
-          )}
-        </div>
-      </section>
-    `;
-  }
-
-  private renderLoadCard(load: LoadSummary) {
-    const progress = this.formatProgress(load.progress);
-    return html`
-      <article class="load-card" aria-labelledby="load-${load.load_id}">
-        <div class="load-header">
-          <div>
-            <h3 id="load-${load.load_id}">${load.name}</h3>
-            <p class="secondary">${load.load_type}</p>
-          </div>
-          <ilc-status-pill
-            .label=${localizeControllerState(this.hass, load.controller_state)}
-          ></ilc-status-pill>
-        </div>
-        <p class="reason">${localizeReasonCode(this.hass, load.reason_code)}</p>
-        ${load.fault
-          ? html`<p class="fault" role="alert">${translate(this.hass, "load.fault")}</p>`
-          : nothing}
-        <dl class="load-meta">
-          ${this.renderLoadMetric(
-            translate(this.hass, "load.automatic"),
-            load.automatic_control
-              ? translate(this.hass, "value.enabled")
-              : translate(this.hass, "value.disabled"),
-          )}
-          ${this.renderLoadMetric(
-            translate(this.hass, "load.optimisation"),
-            load.optimisation_mode ?? translate(this.hass, "value.unavailable"),
-          )}
-          ${this.renderLoadMetric(
-            translate(this.hass, "load.power"),
-            formatMeasurement(this.hass, load.current_power),
-          )}
-          ${this.renderLoadMetric(translate(this.hass, "load.progress"), progress)}
-          ${this.renderLoadMetric(
-            translate(this.hass, "load.deadline"),
-            formatDateTime(this.hass, load.deadline),
-          )}
-          ${this.renderLoadMetric(
-            translate(this.hass, "load.nextAction"),
-            load.next_action ?? translate(this.hass, "value.unavailable"),
-          )}
-          ${this.renderLoadMetric(
-            translate(this.hass, "load.manual"),
-            load.manual_override ?? translate(this.hass, "value.no"),
-          )}
-        </dl>
-        <div class="card-actions">
-          <button class="secondary-button" type="button" @click=${() => void this.openLoad(load.load_id)}>
-            ${translate(this.hass, "load.open")}
-          </button>
-          <button class="text-button" type="button" @click=${() => void this.editConfiguredLoad(load.load_id)}>
-            ${translate(this.hass, "load.edit")}
-          </button>
-        </div>
-      </article>
-    `;
-  }
-
-  private renderPlan() {
-    const plan = this.currentPlan;
-    const timeline = this.dailyTimeline;
-    const intervals = plan?.intervals ?? [];
-    const timelineIntervals = timeline?.intervals ?? [];
-
-    return html`
-      <section class="panel-card" aria-labelledby="current-plan-title">
-        <div class="section-header">
-          <div>
-            <h2 id="current-plan-title">${translate(this.hass, "plan.current")}</h2>
-            ${plan?.generated_at
-              ? html`<p class="secondary">
-                  ${translate(this.hass, "plan.generated", {
-                    time: formatDateTime(this.hass, plan.generated_at),
-                  })}
-                </p>`
-              : nothing}
-          </div>
-          <button class="secondary-button" type="button" @click=${() => void this.replan()}>
-            ${translate(this.hass, "plan.replan")}
-          </button>
-        </div>
-        ${plan
-          ? html`
-              <div class="plan-summary">
-                <p>
-                  <strong>${translate(this.hass, "plan.nextAction")}:</strong>
-                  ${formatDateTime(this.hass, plan.next_action ?? undefined)}
-                </p>
-                ${plan.warnings?.length
-                  ? html`<p class="secondary">${plan.warnings.join(", ")}</p>`
-                  : nothing}
-              </div>
-              ${this.renderPlanIntervals(intervals)} ${this.renderPlanProposals(plan)}
-            `
-          : html`<p class="secondary">${translate(this.hass, "status.noPlan")}</p>`}
-      </section>
-      <section class="panel-card" aria-labelledby="timeline-title">
-        <div class="section-header">
-          <div>
-            <h2 id="timeline-title">${translate(this.hass, "plan.timeline")}</h2>
-            ${timeline?.generated_at
-              ? html`<p class="secondary">
-                  ${translate(this.hass, "plan.generated", {
-                    time: formatDateTime(this.hass, timeline.generated_at),
-                  })}
-                </p>`
-              : nothing}
-          </div>
-        </div>
-        ${this.renderPlanIntervals(timelineIntervals)}
-      </section>
-    `;
-  }
-
-  private renderPlanIntervals(intervals: readonly PlanIntervalResponse[]) {
-    if (intervals.length === 0) {
-      return html`<p class="secondary">${translate(this.hass, "plan.noIntervals")}</p>`;
-    }
-    return html`
-      <div class="table-wrap">
-        <table aria-label=${translate(this.hass, "plan.intervals")}>
-          <thead>
-            <tr>
-              <th>${translate(this.hass, "plan.load")}</th>
-              <th>${translate(this.hass, "plan.start")}</th>
-              <th>${translate(this.hass, "plan.end")}</th>
-              <th>${translate(this.hass, "plan.power")}</th>
-              <th>${translate(this.hass, "plan.reason")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${intervals.map(
-              (interval) => html`
-                <tr>
-                  <td>${interval.load_id ?? "—"}</td>
-                  <td>${formatDateTime(this.hass, interval.start_at)}</td>
-                  <td>${formatDateTime(this.hass, interval.end_at)}</td>
-                  <td>${this.formatWatts(interval.power_w)}</td>
-                  <td>
-                    ${interval.reason_code
-                      ? localizeReasonCode(this.hass, interval.reason_code)
-                      : "—"}
-                  </td>
-                </tr>
-              `,
-            )}
-          </tbody>
-        </table>
-      </div>
-    `;
-  }
-
-  private renderPlanProposals(plan: CurrentPlanResponse) {
-    const proposals = plan.proposals ?? [];
-    if (proposals.length === 0) {
-      return nothing;
-    }
-    return html`
-      <h3>${translate(this.hass, "plan.proposals")}</h3>
-      <div class="table-wrap">
-        <table aria-label=${translate(this.hass, "plan.proposals")}>
-          <thead>
-            <tr>
-              <th>${translate(this.hass, "plan.load")}</th>
-              <th>${translate(this.hass, "plan.authorised")}</th>
-              <th>${translate(this.hass, "plan.reason")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${proposals.map(
-              (proposal) => html`
-                <tr>
-                  <td>${proposal.load_id ?? "—"}</td>
-                  <td>
-                    ${proposal.authorized
-                      ? translate(this.hass, "value.yes")
-                      : translate(this.hass, "value.no")}
-                  </td>
-                  <td>
-                    ${proposal.reason_code
-                      ? localizeReasonCode(this.hass, proposal.reason_code)
-                      : proposal.message ?? "—"}
-                  </td>
-                </tr>
-              `,
-            )}
-          </tbody>
-        </table>
-      </div>
-    `;
-  }
-
-  private renderHistory() {
-    const history = this.history;
-    const events = this.events ?? [];
-    return html`
-      <section class="panel-card" aria-labelledby="history-title">
-        <div class="section-header">
-          <div>
-            <h2 id="history-title">${translate(this.hass, "history.title")}</h2>
-            ${history?.data_quality
-              ? html`<p class="secondary">
-                  ${translate(this.hass, "history.quality", { quality: history.data_quality })}
-                </p>`
-              : nothing}
-          </div>
-        </div>
-        ${this.renderHistoricalSummaries(history?.daily_summaries ?? [])}
-      </section>
-      <section class="panel-card" aria-labelledby="events-title">
-        <div class="section-header">
-          <h2 id="events-title">${translate(this.hass, "events.title")}</h2>
-          <span class="secondary">${events.length}</span>
-        </div>
-        ${this.renderEvents(events)}
-      </section>
-    `;
-  }
-
-  private renderDiagnostics() {
-    const diagnostics = this.diagnostics;
-    return html`
-      <section class="panel-card" aria-labelledby="diagnostics-title">
-        <div class="section-header">
-          <div>
-            <h2 id="diagnostics-title">${translate(this.hass, "diagnostics.title")}</h2>
-            <p class="secondary">${translate(this.hass, "diagnostics.description")}</p>
-          </div>
-        </div>
-        ${diagnostics
-          ? html`
-              <details open>
-                <summary>${translate(this.hass, "diagnostics.raw")}</summary>
-                <pre>${JSON.stringify(diagnostics, null, 2)}</pre>
-              </details>
-            `
-          : html`<p class="secondary">${translate(this.hass, "diagnostics.unavailable")}</p>`}
-      </section>
-    `;
-  }
-
-  private renderHistoricalSummaries(summaries: readonly JsonObject[]) {
-    if (summaries.length === 0) {
-      return html`<p class="secondary">${translate(this.hass, "status.noHistory")}</p>`;
-    }
-    return html`
-      <div class="table-wrap">
-        <table aria-label=${translate(this.hass, "history.title")}>
-          <thead>
-            <tr>
-              <th>${translate(this.hass, "events.time")}</th>
-              <th>${translate(this.hass, "events.message")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${summaries.map(
-              (summary) => html`
-                <tr>
-                  <td>${stringFrom(summary["date"]) ?? stringFrom(summary["day"]) ?? "—"}</td>
-                  <td>${JSON.stringify(summary)}</td>
-                </tr>
-              `,
-            )}
-          </tbody>
-        </table>
-      </div>
-    `;
-  }
-
-  private renderEvents(events: readonly EventJournalEntry[]) {
-    if (events.length === 0) {
-      return html`<p class="secondary">${translate(this.hass, "status.noEvents")}</p>`;
-    }
-    return html`
-      <div class="table-wrap">
-        <table aria-label=${translate(this.hass, "events.title")}>
-          <thead>
-            <tr>
-              <th>${translate(this.hass, "events.time")}</th>
-              <th>${translate(this.hass, "events.load")}</th>
-              <th>${translate(this.hass, "events.state")}</th>
-              <th>${translate(this.hass, "events.reason")}</th>
-              <th>${translate(this.hass, "events.message")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${events.map(
-              (event) => html`
-                <tr>
-                  <td>${formatDateTime(this.hass, event.timestamp)}</td>
-                  <td>${event.load_id ?? "—"}</td>
-                  <td>${event.state ? localizeControllerState(this.hass, event.state) : "—"}</td>
-                  <td>
-                    ${event.reason_code
-                      ? localizeReasonCode(this.hass, event.reason_code)
-                      : "—"}
-                  </td>
-                  <td>${event.message ?? "—"}</td>
-                </tr>
-              `,
-            )}
-          </tbody>
-        </table>
-      </div>
-    `;
   }
 
   private renderConfiguration() {
@@ -1182,7 +765,14 @@ export class IntelligentLoadControllerPanel extends LitElement {
             <section class="panel-card" aria-labelledby="preview-result-title">
               <h3 id="preview-result-title">${translate(this.hass, "config.previewResult")}</h3>
               <p class="secondary">${translate(this.hass, "status.previewOnly")}</p>
-              ${preview.plan ? this.renderPlanIntervals(preview.plan.intervals ?? []) : nothing}
+              ${preview.plan
+                ? html`
+                    <ilc-plan-interval-table
+                      .hass=${this.hass}
+                      .intervals=${preview.plan.intervals ?? []}
+                    ></ilc-plan-interval-table>
+                  `
+                : nothing}
             </section>
           `
         : nothing}
@@ -1294,16 +884,28 @@ export class IntelligentLoadControllerPanel extends LitElement {
     `;
   }
 
-  private renderLoadMetric(label: string, value: string) {
-    return html`<div><dt>${label}</dt><dd>${value}</dd></div>`;
-  }
-
   private readonly handleNavigation = (event: Event): void => {
     const detail = (event as CustomEvent<{ view?: WorkspaceView }>).detail;
     if (!detail?.view) {
       return;
     }
     void this.selectWorkspaceView(detail.view);
+  };
+
+  private readonly handleOpenLoad = (event: Event): void => {
+    const loadId = (event as CustomEvent<{ loadId?: string }>).detail?.loadId;
+    if (!loadId) {
+      return;
+    }
+    void this.openLoad(loadId);
+  };
+
+  private readonly handleEditLoad = (event: Event): void => {
+    const loadId = (event as CustomEvent<{ loadId?: string }>).detail?.loadId;
+    if (!loadId) {
+      return;
+    }
+    void this.editConfiguredLoad(loadId);
   };
 
   private async selectWorkspaceView(view: WorkspaceView, pushRoute = true): Promise<void> {
@@ -1979,28 +1581,6 @@ export class IntelligentLoadControllerPanel extends LitElement {
     return fallback;
   }
 
-  private formatWatts(value: number | undefined): string {
-    return value === undefined ? "—" : formatMeasurement(this.hass, { value, unit: "W" });
-  }
-
-  private formatProgress(progress: LoadProgress | undefined): string {
-    if (!progress) {
-      return "—";
-    }
-    if (progress.percent !== undefined) {
-      return `${new Intl.NumberFormat(this.locale, { maximumFractionDigits: 0 }).format(progress.percent)}%`;
-    }
-    if (progress.current !== undefined && progress.target !== undefined) {
-      const unit = progress.unit ? ` ${progress.unit}` : "";
-      return `${progress.current}/${progress.target}${unit}`;
-    }
-    return "—";
-  }
-
-  private get locale(): string {
-    return this.hass?.locale?.language ?? this.hass?.language ?? navigator.language;
-  }
-
   private pageTitle(): string {
     switch (this.workspaceView) {
       case "load":
@@ -2018,10 +1598,6 @@ export class IntelligentLoadControllerPanel extends LitElement {
       case "dashboard":
         return translate(this.hass, "app.overview");
     }
-  }
-
-  private localizeHealth(health: SiteSummary["health"]): string {
-    return translate(this.hass, `health.${health}` as Parameters<typeof translate>[1]);
   }
 
   private isWebsocketConnected(): boolean {

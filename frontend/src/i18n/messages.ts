@@ -136,6 +136,7 @@ export const messages = {
     "plan.authorised": "Authorised",
     "history.title": "Historical summaries",
     "history.quality": "Data quality: {quality}",
+    "history.complexValue": "Detailed value available in Diagnostics",
     "events.title": "Decision event journal",
     "events.time": "Time",
     "events.state": "State",

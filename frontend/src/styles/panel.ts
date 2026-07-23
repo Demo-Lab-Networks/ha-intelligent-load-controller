@@ -456,6 +456,28 @@ export const panelStyles = [ilcDesignTokens, css`
       margin-block-end: 1rem;
     }
 
+    .summary-fields {
+      display: grid;
+      gap: 0.35rem;
+      margin: 0;
+    }
+
+    .summary-fields div {
+      display: grid;
+      gap: 0.25rem;
+      grid-template-columns: minmax(8rem, 0.35fr) minmax(0, 1fr);
+    }
+
+    .summary-fields dt {
+      color: var(--secondary-text-color);
+      text-transform: capitalize;
+    }
+
+    .summary-fields dd {
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+
     details summary {
       cursor: pointer;
       font-weight: 600;
@@ -527,6 +549,10 @@ export const panelStyles = [ilcDesignTokens, css`
       }
 
       .load-meta {
+        grid-template-columns: 1fr;
+      }
+
+      .summary-fields div {
         grid-template-columns: 1fr;
       }
 

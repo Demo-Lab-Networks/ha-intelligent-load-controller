@@ -10,16 +10,19 @@ All notable changes will be documented here. The project intends to follow [Keep
 - Deterministic brand sync/validation tooling, CI brand checking, and troubleshooting/runbook documentation for icon cache refresh, CDN-backed HACS surfaces, and pre-2026.3 branding limits.
 - UX redesign Phase 1 shell slice: route-aware Overview/Loads/load-detail/Plan/Insights/Settings/Diagnostics navigation, design tokens, shell/router/feedback/status primitives, and local visual baseline screenshots.
 - Read-only frontend diagnostics route and API facade convenience method.
+- Route-level page modules for Overview, Loads, Plan, Insights, and Diagnostics, plus shared load summary and plan table/proposal components.
 
 ### Changed
 
 - Rebuilt the committed frontend bundle for the Phase 1 shell slice.
 - Local Playwright harness now feeds direct panel paths into the custom panel route property for route testing.
+- Reduced the root panel component by moving presentational page rendering into dedicated modules.
 
 ### Fixed
 
 - Guarded Apache ECharts initialization so repeated renders do not create duplicate chart instances.
 - Ensured dark-theme shell backgrounds fill the viewport on short pages.
+- Replaced raw JSON rendering for ordinary Insights daily summaries with labelled fields and a Diagnostics fallback for complex values.
 
 ## [0.2.0] - Initial 0.2 baseline
 

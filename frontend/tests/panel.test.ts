@@ -292,7 +292,16 @@ describe("intelligent-load-controller-panel", () => {
         case "intelligent_load_controller/v1/daily_timeline":
           return { intervals: [], generated_at: null };
         case "intelligent_load_controller/v1/historical_summary":
-          return { daily_summaries: [], data_quality: "unknown" };
+          return {
+            daily_summaries: [
+              {
+                date: "2026-07-23",
+                controlled_energy_kwh: 4.2,
+                nested_payload: { raw: true },
+              },
+            ],
+            data_quality: "unknown",
+          };
         case "intelligent_load_controller/v1/event_journal":
           return { events: [] };
         default:
@@ -326,6 +335,10 @@ describe("intelligent-load-controller-panel", () => {
           { type: "intelligent_load_controller/v1/event_journal", entry_id: "entry-home" },
         ]),
       );
+      expect(panel.shadowRoot?.textContent).toContain("controlled energy kwh");
+      expect(panel.shadowRoot?.textContent).toContain("4.2");
+      expect(panel.shadowRoot?.textContent).toContain("Detailed value available in Diagnostics");
+      expect(panel.shadowRoot?.textContent).not.toContain('{"date"');
     });
   });
 
