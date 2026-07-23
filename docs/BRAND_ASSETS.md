@@ -99,6 +99,12 @@ HACS repository imagery and Home Assistant brand surfaces can continue showing c
 
 Because this project still advertises Home Assistant 2025.4.0 compatibility, a future submission to `home-assistant/brands` is still needed for pre-2026.3 installed-integration icon coverage and for HACS surfaces that still fetch CDN brand URLs.
 
+External verification on 2026-07-23:
+
+- `home-assistant/brands/custom_integrations/intelligent_load_controller/` returned `404`, so the central custom-integration brand entry does not exist yet.
+- Current HACS `update.py` still returns `https://brands.home-assistant.io/_/{domain}/icon.png` for integration update entity pictures.
+- Current HACS `validate/brands.py` accepts a local `brand/icon.png` package asset before falling back to the central brands repository.
+
 Prepare that submission from the canonical root assets in this repository:
 
 - `brand/icon.png`
