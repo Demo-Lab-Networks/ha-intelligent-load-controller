@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -221,13 +222,18 @@ async def test_load_entities_are_registered_against_their_config_subentry(
         )
 
 
-async def test_panel_registers_as_a_custom_panel_with_local_bundle(hass) -> None:
+async def test_panel_registers_as_a_custom_panel_with_local_bundle(hass, monkeypatch) -> None:
     """Register the sidebar item through HA's custom-panel contract."""
 
     hass.data[DOMAIN] = {"runtimes": {"site-1": object()}}
     register_static_paths = AsyncMock()
     register_panel = MagicMock()
-    hass.http.async_register_static_paths = register_static_paths
+    monkeypatch.setattr(
+        hass,
+        "http",
+        SimpleNamespace(async_register_static_paths=register_static_paths),
+        raising=False,
+    )
 
     with patch(
         "custom_components.intelligent_load_controller.panel.frontend.async_register_built_in_panel",

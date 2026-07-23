@@ -36,6 +36,7 @@ if (( missing )); then
 fi
 
 "${SCRIPT_DIR}/lint" all
+"${SCRIPT_DIR}/validate-brand-assets"
 "${SCRIPT_DIR}/test"
 "${SCRIPT_DIR}/build-frontend"
 

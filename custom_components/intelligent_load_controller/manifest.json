@@ -1,6 +1,7 @@
 {
   "domain": "intelligent_load_controller",
   "name": "Intelligent Load Controller",
+  "after_dependencies": ["http"],
   "codeowners": ["@Demo-Lab-Networks"],
   "config_flow": true,
   "documentation": "https://github.com/Demo-Lab-Networks/ha-intelligent-load-controller",
