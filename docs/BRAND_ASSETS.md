@@ -24,17 +24,17 @@ The previous asset set also had a quality gap:
 | Consumer | Required asset path | Current outcome |
 | --- | --- | --- |
 | HACS package validation | `brand/icon.png` when `content_in_root` is true | Supported by this repository fix |
-| HACS UI surfaces that use the Home Assistant brands CDN | Central `home-assistant/brands` entry for `custom_integrations/intelligent_load_controller/` | External PR open: <https://github.com/home-assistant/brands/pull/10820> |
+| HACS UI surfaces that use the Home Assistant brands CDN | HACS needs to stop using the legacy brands-CDN placeholder path for new custom integrations | Not fixable in this repository; `home-assistant/brands` no longer accepts new custom integration entries |
 | Home Assistant 2026.3+ installed custom integration branding | `custom_components/intelligent_load_controller/brand/` | Supported by this repository fix |
-| Home Assistant 2025.4.0 through 2026.2.x installed integration branding | Central `home-assistant/brands` submission for `custom_integrations/intelligent_load_controller/` | External PR open: <https://github.com/home-assistant/brands/pull/10820> |
+| Home Assistant 2025.4.0 through 2026.2.x installed integration branding | Previously central `home-assistant/brands`; now closed to new custom integration entries | Known limitation |
 
 Outcome adopted for this repository:
 
 1. Root branding plus integration-local branding makes the downloaded repository complete and passes current HACS package validation.
 2. Home Assistant 2026.3+ can serve the installed custom integration icon from the integration-local `brand/` directory.
-3. A central `home-assistant/brands` submission is still required for Home Assistant versions before 2026.3 and for any HACS UI surface that continues to fetch from the brands CDN. That submission is open as <https://github.com/home-assistant/brands/pull/10820>.
+3. A central `home-assistant/brands` submission would be required for Home Assistant versions before 2026.3 and for any HACS UI surface that continues to fetch from the brands CDN, but Home Assistant brands now automatically closes new custom integration brand submissions.
 
-The external pull request was opened after maintainer approval and is tracked separately from this repository change.
+The external pull request was opened after maintainer approval, validated successfully, and was then closed by Home Assistant automation because new custom integration brand entries are no longer accepted.
 
 ## Canonical asset layout
 
@@ -97,15 +97,20 @@ HACS repository imagery and Home Assistant brand surfaces can continue showing c
 
 ## External prerequisite for older Home Assistant versions
 
-Because this project still advertises Home Assistant 2025.4.0 compatibility, `home-assistant/brands` coverage is still needed for pre-2026.3 installed-integration icon coverage and for HACS surfaces that still fetch CDN brand URLs.
+Because this project still advertises Home Assistant 2025.4.0 compatibility, pre-2026.3 installed-integration icon coverage remains limited. The central `home-assistant/brands` path is no longer available for new custom integration domains, so this repository can only provide:
+
+- root `brand/` assets for HACS package validation and downloaded repository content;
+- integration-local `custom_components/intelligent_load_controller/brand/` assets for Home Assistant 2026.3+;
+- operator guidance for HACS/browser cache refresh and CDN-placeholder diagnosis.
 
 External verification on 2026-07-23:
 
 - `home-assistant/brands/custom_integrations/intelligent_load_controller/` returned `404`, so the central custom-integration brand entry does not exist yet.
 - Current HACS `update.py` still returns `https://brands.home-assistant.io/_/{domain}/icon.png` for integration update entity pictures.
 - Current HACS `validate/brands.py` accepts a local `brand/icon.png` package asset before falling back to the central brands repository.
+- `home-assistant/brands` pull request <https://github.com/home-assistant/brands/pull/10820> was opened, passed the upstream `Images` validation, and was automatically closed with the project policy: new custom integration brand icons are no longer accepted in that repository.
 
-The submission was prepared from the canonical root assets in this repository:
+The attempted submission was prepared from the canonical root assets in this repository:
 
 - `brand/icon.png`
 - `brand/icon@2x.png`
@@ -129,10 +134,10 @@ cp brand/logo.png ../brands/custom_integrations/intelligent_load_controller/logo
 cp brand/logo@2x.png ../brands/custom_integrations/intelligent_load_controller/logo@2x.png
 ```
 
-External pull request:
+External pull request result:
 
-- <https://github.com/home-assistant/brands/pull/10820>
+- <https://github.com/home-assistant/brands/pull/10820> was closed by Home Assistant automation.
 
-After that PR merges and the CDN cache expires or is refreshed, verify the HACS CDN-backed path:
+If HACS continues to show a placeholder from the CDN-backed path below after the local assets are installed and caches are refreshed, that behavior needs to be fixed in HACS or Home Assistant brand proxy behavior rather than by adding files to this repository:
 
 - `https://brands.home-assistant.io/_/intelligent_load_controller/icon.png`
