@@ -19,6 +19,7 @@ All notable changes will be documented here. The project intends to follow [Keep
 - Backend-ranked attention items for persisted runtime actuator faults and invalid load configurations.
 - Backend-owned load-card summary fields for measured current power, configured deadline, and structured next planned start/stop action.
 - Backend-owned load-card target progress and target status fields derived from bounded runtime/feedback evidence and stored plan risk.
+- Backend-ranked attention items for impossible targets, at-risk targets, and approaching load deadlines.
 
 ### Changed
 

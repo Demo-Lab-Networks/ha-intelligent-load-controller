@@ -212,6 +212,105 @@ async def test_site_summary_exposes_backend_ranked_attention_items(
     )
 
 
+async def test_site_summary_attention_includes_backend_target_and_deadline_items(
+    hass,
+    load_control_config_entry,
+    load_config,
+    runtime_store,
+) -> None:
+    """Target risk/deadline attention is ranked by backend plan evidence."""
+
+    coordinator = SiteCoordinator(hass, load_control_config_entry, runtime_store)
+    await coordinator.async_start()
+    now = datetime.now(UTC)
+
+    impossible_config = dict(load_config)
+    impossible_config["display_name"] = "Impossible target"
+    impossible_config["requirements"] = {
+        "minimum_runtime_s": 1800,
+        "deadline_at": (now + timedelta(hours=1)).isoformat(),
+    }
+    impossible = await coordinator.async_add_load(impossible_config)
+
+    risk_config = dict(load_config)
+    risk_config["display_name"] = "At risk target"
+    risk_config["requirements"] = {"minimum_runtime_s": 1800}
+    at_risk = await coordinator.async_add_load(risk_config)
+
+    deadline_config = dict(load_config)
+    deadline_config["display_name"] = "Soon target"
+    deadline_config["requirements"] = {
+        "minimum_runtime_s": 900,
+        "deadline_at": (now + timedelta(minutes=90)).isoformat(),
+    }
+    soon = await coordinator.async_add_load(deadline_config)
+
+    coordinator._last_plan = {  # noqa: SLF001
+        "intervals": [],
+        "loads": [
+            {
+                "load_id": impossible["load_id"],
+                "required_slots": 6,
+                "scheduled_slots": 2,
+                "unmet_slots": 4,
+                "reason_codes": ["deadline_impossible"],
+            },
+            {
+                "load_id": at_risk["load_id"],
+                "required_slots": 6,
+                "scheduled_slots": 3,
+                "unmet_slots": 3,
+                "reason_codes": ["plan_not_selected"],
+            },
+            {
+                "load_id": soon["load_id"],
+                "required_slots": 3,
+                "scheduled_slots": 3,
+                "unmet_slots": 0,
+                "reason_codes": ["plan_selected"],
+            },
+        ],
+    }
+
+    summary = await coordinator.async_site_summary()
+    attention = summary["attention"]
+
+    assert {
+        item["code"]: {
+            "rank": item["rank"],
+            "severity": item["severity"],
+            "affected_id": item.get("affected_id"),
+            "action": item.get("action"),
+            "reason_code": item.get("reason_code"),
+        }
+        for item in attention
+        if item["code"] in {"target_impossible", "target_at_risk", "deadline_approaching"}
+    } == {
+        "target_impossible": {
+            "rank": 3,
+            "severity": "critical",
+            "affected_id": impossible["load_id"],
+            "action": "load_detail",
+            "reason_code": "deadline_impossible",
+        },
+        "target_at_risk": {
+            "rank": 4,
+            "severity": "warning",
+            "affected_id": at_risk["load_id"],
+            "action": "load_detail",
+            "reason_code": "plan_not_selected",
+        },
+        "deadline_approaching": {
+            "rank": 8,
+            "severity": "info",
+            "affected_id": soon["load_id"],
+            "action": "load_detail",
+            "reason_code": "deadline_due",
+        },
+    }
+    assert attention == sorted(attention, key=lambda item: item["rank"])
+
+
 async def test_load_list_exposes_backend_card_presentation_fields(
     hass,
     load_control_config_entry,

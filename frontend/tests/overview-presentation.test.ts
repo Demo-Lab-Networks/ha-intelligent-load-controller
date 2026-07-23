@@ -250,6 +250,62 @@ describe("overview presentation", () => {
     });
   });
 
+  it("maps backend target and deadline attention without duplicating fallback load risk", () => {
+    const presentation = createOverviewPresentation({
+      site: {
+        ...baseSite,
+        attention: [
+          {
+            id: "load:ev:target_impossible",
+            code: "target_impossible",
+            rank: 3,
+            severity: "critical",
+            affected_kind: "load",
+            affected_id: "ev",
+            display_name: "EV charger",
+            action: "load_detail",
+          },
+          {
+            id: "load:hws:target_at_risk",
+            code: "target_at_risk",
+            rank: 4,
+            severity: "warning",
+            affected_kind: "load",
+            affected_id: "hws",
+            display_name: "Hot water",
+            action: "load_detail",
+          },
+          {
+            id: "load:pool:deadline_approaching",
+            code: "deadline_approaching",
+            rank: 8,
+            severity: "info",
+            affected_kind: "load",
+            affected_id: "pool",
+            display_name: "Pool pump",
+            action: "load_detail",
+          },
+        ],
+      },
+      loads: [
+        load({ load_id: "ev", name: "EV charger", target_status: "impossible" }),
+        load({ load_id: "hws", name: "Hot water", target_status: "at_risk" }),
+      ],
+    });
+
+    expect(presentation.attention.map((item) => item.id)).toEqual([
+      "load:ev:target_impossible",
+      "load:hws:target_at_risk",
+      "load:pool:deadline_approaching",
+    ]);
+    expect(presentation.attention.map((item) => item.titleKey)).toEqual([
+      "overview.attention.targetImpossible",
+      "overview.attention.targetAtRisk",
+      "overview.attention.deadlineApproaching",
+    ]);
+    expect(presentation.attention.every((item) => item.action === "load_detail")).toBe(true);
+  });
+
   it("creates a compressed today timeline from backend intervals without inventing decisions", () => {
     const timeline = createTodayTimelinePresentation(
       [

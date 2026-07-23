@@ -348,6 +348,21 @@ function attentionCopyForCode(code: string): { titleKey: MessageKey; summaryKey:
         titleKey: "overview.attention.feedbackMismatch",
         summaryKey: "overview.attention.feedbackMismatchSummary",
       };
+    case "target_impossible":
+      return {
+        titleKey: "overview.attention.targetImpossible",
+        summaryKey: "overview.attention.targetImpossibleSummary",
+      };
+    case "target_at_risk":
+      return {
+        titleKey: "overview.attention.targetAtRisk",
+        summaryKey: "overview.attention.targetAtRiskSummary",
+      };
+    case "deadline_approaching":
+      return {
+        titleKey: "overview.attention.deadlineApproaching",
+        summaryKey: "overview.attention.deadlineApproachingSummary",
+      };
     case "manual_indefinite_override":
       return {
         titleKey: "overview.attention.indefiniteOverride",

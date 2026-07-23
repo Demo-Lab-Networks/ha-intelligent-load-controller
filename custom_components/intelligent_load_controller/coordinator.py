@@ -2904,11 +2904,14 @@ class SiteCoordinator:
     def _load_deadline_at(self, config: Mapping[str, Any]) -> str | None:
         """Return the configured UTC deadline for a load, if one is defined."""
 
-        requirements = self._mapping_or_empty(config.get("requirements"))
-        deadline = self._parse_deadline(
-            requirements.get("deadline_at") or requirements.get("deadline")
-        )
+        deadline = self._load_deadline_datetime(config)
         return deadline.isoformat() if deadline is not None else None
+
+    def _load_deadline_datetime(self, config: Mapping[str, Any]) -> datetime | None:
+        """Return the configured UTC deadline instant for a load, if one is defined."""
+
+        requirements = self._mapping_or_empty(config.get("requirements"))
+        return self._parse_deadline(requirements.get("deadline_at") or requirements.get("deadline"))
 
     def _load_target_progress(
         self, config: Mapping[str, Any], load_id: str
@@ -2970,11 +2973,14 @@ class SiteCoordinator:
         config: Mapping[str, Any],
         load_id: str,
         progress: Mapping[str, Any] | None,
+        *,
+        now: datetime | None = None,
     ) -> str | None:
         """Return backend-owned target health for load-card presentation."""
 
         if self._progress_complete(progress):
             return "complete"
+        current_time = datetime.now(UTC) if now is None else now
 
         plan_result = self._load_plan_result(load_id)
         if plan_result:
@@ -2991,7 +2997,7 @@ class SiteCoordinator:
         deadline = self._parse_deadline(
             requirements.get("deadline_at") or requirements.get("deadline")
         )
-        if deadline is not None and deadline <= datetime.now(UTC):
+        if deadline is not None and deadline <= current_time:
             return "at_risk"
 
         if progress is not None or self._load_has_target(config):
@@ -3010,6 +3016,16 @@ class SiteCoordinator:
             if isinstance(item, Mapping) and item.get("load_id") == load_id:
                 return self._mapping_or_empty(item)
         return {}
+
+    def _load_primary_plan_reason(self, load_id: str, default: str) -> str:
+        """Return the first stable plan reason for display, if available."""
+
+        reason_codes = self._load_plan_result(load_id).get("reason_codes")
+        if isinstance(reason_codes, list):
+            for reason_code in reason_codes:
+                if isinstance(reason_code, str) and reason_code:
+                    return reason_code
+        return default
 
     def _load_has_target(self, config: Mapping[str, Any]) -> bool:
         """Return whether the load has a configured target/deadline requirement."""
@@ -3284,6 +3300,62 @@ class SiteCoordinator:
                     display_name=display_name,
                     action="load_detail",
                     reason_code=runtime_fault,
+                )
+                continue
+            if load_id_text is None:
+                continue
+            if load_id_text in self._conflicting_actuator_load_ids:
+                continue
+            now = datetime.now(UTC)
+            progress = self._load_target_progress(load_config, load_id_text)
+            target_status = self._load_target_status(
+                load_config,
+                load_id_text,
+                progress,
+                now=now,
+            )
+            if target_status == "impossible":
+                add(
+                    item_id=f"load:{load_id_text}:target_impossible",
+                    code="target_impossible",
+                    rank=3,
+                    severity="critical",
+                    affected_kind="load",
+                    affected_id=load_id_text,
+                    display_name=display_name,
+                    action="load_detail",
+                    reason_code=self._load_primary_plan_reason(load_id_text, "deadline_impossible"),
+                )
+                continue
+            if target_status == "at_risk":
+                add(
+                    item_id=f"load:{load_id_text}:target_at_risk",
+                    code="target_at_risk",
+                    rank=4,
+                    severity="warning",
+                    affected_kind="load",
+                    affected_id=load_id_text,
+                    display_name=display_name,
+                    action="load_detail",
+                    reason_code=self._load_primary_plan_reason(load_id_text, "deadline_due"),
+                )
+                continue
+            deadline = self._load_deadline_datetime(load_config)
+            if (
+                target_status != "complete"
+                and deadline is not None
+                and now < deadline <= now + timedelta(hours=2)
+            ):
+                add(
+                    item_id=f"load:{load_id_text}:deadline_approaching",
+                    code="deadline_approaching",
+                    rank=8,
+                    severity="info",
+                    affected_kind="load",
+                    affected_id=load_id_text,
+                    display_name=display_name,
+                    action="load_detail",
+                    reason_code="deadline_due",
                 )
 
         for load_id in sorted(self._conflicting_actuator_load_ids):

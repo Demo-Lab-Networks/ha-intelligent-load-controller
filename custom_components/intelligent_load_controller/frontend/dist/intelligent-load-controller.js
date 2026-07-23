@@ -730,6 +730,8 @@ var Ze = t((() => {
 		"overview.attention.targetImpossibleSummary": "The backend reports this target cannot currently be completed as configured.",
 		"overview.attention.targetAtRisk": "{load} target at risk",
 		"overview.attention.targetAtRiskSummary": "The backend reports this target needs review or catch-up.",
+		"overview.attention.deadlineApproaching": "{load} deadline approaching",
+		"overview.attention.deadlineApproachingSummary": "The backend reports this target deadline is soon. Open the load to review the current plan.",
 		"overview.attention.indefiniteOverride": "{load} indefinite override",
 		"overview.attention.indefiniteOverrideSummary": "Manual control remains active until someone clears it.",
 		"overview.attention.timedOverride": "{load} timed override",
@@ -1831,6 +1833,18 @@ function hee(e) {
 		case "actuator_feedback_mismatch": return {
 			titleKey: "overview.attention.feedbackMismatch",
 			summaryKey: "overview.attention.feedbackMismatchSummary"
+		};
+		case "target_impossible": return {
+			titleKey: "overview.attention.targetImpossible",
+			summaryKey: "overview.attention.targetImpossibleSummary"
+		};
+		case "target_at_risk": return {
+			titleKey: "overview.attention.targetAtRisk",
+			summaryKey: "overview.attention.targetAtRiskSummary"
+		};
+		case "deadline_approaching": return {
+			titleKey: "overview.attention.deadlineApproaching",
+			summaryKey: "overview.attention.deadlineApproachingSummary"
 		};
 		case "manual_indefinite_override": return {
 			titleKey: "overview.attention.indefiniteOverride",

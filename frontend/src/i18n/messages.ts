@@ -121,6 +121,8 @@ export const messages = {
     "overview.attention.targetImpossibleSummary": "The backend reports this target cannot currently be completed as configured.",
     "overview.attention.targetAtRisk": "{load} target at risk",
     "overview.attention.targetAtRiskSummary": "The backend reports this target needs review or catch-up.",
+    "overview.attention.deadlineApproaching": "{load} deadline approaching",
+    "overview.attention.deadlineApproachingSummary": "The backend reports this target deadline is soon. Open the load to review the current plan.",
     "overview.attention.indefiniteOverride": "{load} indefinite override",
     "overview.attention.indefiniteOverrideSummary": "Manual control remains active until someone clears it.",
     "overview.attention.timedOverride": "{load} timed override",
