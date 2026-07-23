@@ -3,6 +3,8 @@
 **Status:** Phase 0 contract for optional display-oriented backend fields.  
 **Rule:** These fields present backend-authoritative decisions. They must not change planner, safety, actuator, or optimisation semantics.
 
+**2026-07-23 update:** The Phase 2 Overview starter renders a better frontend hierarchy from existing typed backend fields (`health`, `fault`, `target_status`, `manual_override`, controller state, measurements, and reason codes). That does not close the backend gaps below; dedicated optional presentation and backend-ranked attention fields are still required for the full Phase 2 exit gate.
+
 ## Current backend contract strengths
 
 - Versioned WebSocket namespace exists under `intelligent_load_controller/v1/...`.
@@ -53,4 +55,3 @@ Frontend may sort by backend `rank`; it must not reinterpret severity from Engli
 - Add frontend model tests for missing/partial presentation fields.
 - Add permission and stable-error tests for Settings and Diagnostics routes.
 - Keep presentation models redacted; no entity secrets or unrestricted state.
-

@@ -79,6 +79,84 @@ describe("intelligent-load-controller-panel", () => {
     expect(shellMain(panel)?.getAttribute("aria-busy")).toBe("false");
   });
 
+  it("renders the redesigned overview hierarchy from backend summary fields", async () => {
+    const panel = document.createElement(
+      "intelligent-load-controller-panel",
+    ) as IntelligentLoadControllerPanel;
+    panel.hass = createHass((message) => {
+      switch (message["type"]) {
+        case "intelligent_load_controller/v1/site_list":
+          return { sites: [{ entry_id: "entry-home", site_id: "home", name: "Home" }] };
+        case "intelligent_load_controller/v1/site_summary":
+          return {
+            entry_id: "entry-home",
+            site_id: "home",
+            name: "Home",
+            state: "idle",
+            active_loads: 1,
+            waiting_loads: 2,
+            health: "warning",
+            grid_import: { value: 0, unit: "W", quality: "measured" },
+            grid_export: { value: 950, unit: "W", quality: "measured" },
+            solar_production: { value: 3400, unit: "W", quality: "measured" },
+            controlled_power: { value: 2400, unit: "W", quality: "measured" },
+            controlled_energy_today: { value: 4.2, unit: "kWh", quality: "derived" },
+            controlled_cost_today: { value: 1.15, currency: "AUD", unit: "kWh", quality: "derived" },
+            next_deadline: "2026-07-23T20:00:00Z",
+            updated_at: "2026-07-23T02:00:00Z",
+          };
+        case "intelligent_load_controller/v1/load_list":
+          return {
+            loads: [
+              {
+                load_id: "hot-water",
+                name: "Hot water",
+                type: "hot_water",
+                state: "solar_run",
+                reason_code: "solar_export_qualified",
+                automatic_control: true,
+                current_power: { value: 2400, unit: "W", quality: "measured" },
+                target_status: "on_track",
+              },
+              {
+                load_id: "ev",
+                name: "EV charger",
+                type: "ev_charger",
+                state: "waiting_for_window",
+                reason_code: "deadline_catchup",
+                automatic_control: true,
+                target_status: "at_risk",
+              },
+              {
+                load_id: "pool",
+                name: "Pool pump",
+                type: "generic_binary",
+                state: "waiting_for_window",
+                reason_code: "lowest_cost_window",
+                automatic_control: true,
+                next_action: "Start during free period",
+              },
+            ],
+          };
+        default:
+          return {};
+      }
+    });
+    document.body.append(panel);
+
+    await vi.waitFor(() => {
+      expect(panel.shadowRoot?.textContent).toContain("Home Status");
+      expect(panel.shadowRoot?.textContent).toContain("Watch closely");
+      expect(panel.shadowRoot?.textContent).toContain("Live energy flow");
+      expect(panel.shadowRoot?.textContent).toContain("Exporting 950 W to the grid.");
+      expect(panel.shadowRoot?.textContent).toContain("Attention and opportunities");
+      expect(panel.shadowRoot?.textContent).toContain("EV charger target at risk");
+      expect(panel.shadowRoot?.textContent).toContain("Today summary");
+      expect(panel.shadowRoot?.textContent).toContain("Running now");
+      expect(panel.shadowRoot?.textContent).toContain("Starting soon");
+    });
+  });
+
   it("shows a reconnecting state without issuing a websocket command", async () => {
     const callWS = vi.fn();
     const panel = document.createElement(

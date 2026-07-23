@@ -19,9 +19,13 @@ test("@a11y populated dashboard exposes a text equivalent for its chart", async 
 
   const panel = page.locator("intelligent-load-controller-panel");
   await expect(panel).toBeVisible();
-  await expect(panel.getByText("Hot water")).toBeVisible();
+  await expect(panel.getByText("Home Status")).toBeVisible();
+  await expect(panel.getByRole("heading", { name: "Importing from grid" })).toBeVisible();
+  await expect(panel.getByText("Live energy flow")).toBeVisible();
+  await expect(panel.getByText("Today summary")).toBeVisible();
+  await expect(panel.getByRole("heading", { name: "Hot water" })).toBeVisible();
   await expect(panel.locator("ilc-site-snapshot-chart")).toBeVisible();
-  await expect(panel.locator("dt").filter({ hasText: "Grid import" })).toBeVisible();
+  await expect(panel.getByRole("img", { name: /solar .* controlled loads/i })).toBeVisible();
 
   const accessibility = await new AxeBuilder({ page })
     .include("intelligent-load-controller-panel")

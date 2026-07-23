@@ -158,6 +158,13 @@ export interface SiteSummaryResponse {
   waiting_load_count?: number;
   total_controlled_power_w?: number;
   controlled_power?: Measurement;
+  grid_import?: Measurement;
+  grid_export?: Measurement;
+  solar_production?: Measurement;
+  current_import_price?: SiteSummary["current_import_price"];
+  controlled_energy_today?: Measurement;
+  controlled_cost_today?: SiteSummary["controlled_cost_today"];
+  next_deadline?: string;
   health?: SiteSummary["health"];
   updated_at?: string;
   last_replan_at?: string;
@@ -454,10 +461,17 @@ function normalizeSiteSummary(response: SiteSummaryResponse): SiteSummary {
     site_id: response.site_id ?? response.entry_id ?? "site",
     name: response.name ?? "Load Control",
     controller_state: response.controller_state ?? response.state ?? "initialising",
+    grid_import: response.grid_import,
+    grid_export: response.grid_export,
+    solar_production: response.solar_production,
     controlled_power:
       response.controlled_power ?? measurementFromWatts(response.total_controlled_power_w),
     active_load_count: response.active_load_count ?? response.active_loads ?? 0,
     waiting_load_count: response.waiting_load_count ?? response.waiting_loads ?? 0,
+    current_import_price: response.current_import_price,
+    controlled_energy_today: response.controlled_energy_today,
+    controlled_cost_today: response.controlled_cost_today,
+    next_deadline: response.next_deadline,
     health,
     updated_at: response.updated_at ?? response.last_replan_at,
   };

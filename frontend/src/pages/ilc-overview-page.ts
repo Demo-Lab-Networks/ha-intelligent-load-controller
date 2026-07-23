@@ -1,12 +1,17 @@
 import { html, LitElement, nothing } from "lit";
 import { property } from "lit/decorators.js";
 
+import "../components/energy/ilc-energy-flow-card";
 import "../components/feedback/ilc-empty-state";
 import "../components/loads/ilc-load-summary-card";
+import "../components/overview/ilc-attention-list";
+import "../components/overview/ilc-home-status-hero";
+import "../components/overview/ilc-today-kpis";
+import { createOverviewPresentation } from "../features/overview/overview-presentation";
 import { translate } from "../i18n";
 import type { DashboardData, SiteSummary } from "../models/dashboard";
 import type { HomeAssistant } from "../types/home-assistant";
-import { formatCurrencyRate, formatDateTime, formatMeasurement } from "../utils/format";
+import { formatDateTime, formatMeasurement } from "../utils/format";
 
 export type IlcChartComponentState = "loading" | "ready" | "failed";
 
@@ -24,9 +29,21 @@ export class IlcOverviewPage extends LitElement {
     if (!dashboard) {
       return nothing;
     }
+    const presentation = createOverviewPresentation(dashboard);
 
     return html`
-      ${this.renderMetrics(dashboard.site)}
+      <ilc-home-status-hero
+        .hass=${this.hass}
+        .site=${dashboard.site}
+        .presentation=${presentation.hero}
+      ></ilc-home-status-hero>
+      <ilc-energy-flow-card .hass=${this.hass} .site=${dashboard.site}></ilc-energy-flow-card>
+      <ilc-attention-list
+        .hass=${this.hass}
+        .items=${presentation.attention}
+        @ilc-open-load=${this.redispatchLoadEvent}
+      ></ilc-attention-list>
+      <ilc-today-kpis .hass=${this.hass} .site=${dashboard.site} .loads=${dashboard.loads}></ilc-today-kpis>
       <section class="panel-card" aria-labelledby="snapshot-title">
         <div class="section-header">
           <div>
@@ -38,7 +55,10 @@ export class IlcOverviewPage extends LitElement {
       </section>
       <section aria-labelledby="loads-title">
         <div class="section-header">
-          <h2 id="loads-title">${translate(this.hass, "load.list")}</h2>
+          <div>
+            <h2 id="loads-title">${translate(this.hass, "overview.activeUpcoming")}</h2>
+            <p class="secondary">${translate(this.hass, "overview.activeUpcomingHint")}</p>
+          </div>
           <span class="secondary">${dashboard.loads.length}</span>
         </div>
         ${dashboard.loads.length === 0
@@ -48,11 +68,29 @@ export class IlcOverviewPage extends LitElement {
                 .message=${translate(this.hass, "status.emptyHint")}
               ></ilc-empty-state>
             `
-          : html`<div class="load-grid">
-              ${dashboard.loads.map(
-                (load) => html`<ilc-load-summary-card .hass=${this.hass} .load=${load}></ilc-load-summary-card>`,
-              )}
-            </div>`}
+          : html`
+              <div class="overview-load-groups">
+                ${presentation.loadGroups.map(
+                  (group) => html`
+                    <section class="overview-load-group" aria-labelledby=${`load-group-${group.key}`}>
+                      <h3 id=${`load-group-${group.key}`}>${translate(this.hass, group.titleKey)}</h3>
+                      <div class="load-grid">
+                        ${group.loads.map(
+                          (load) => html`
+                            <ilc-load-summary-card
+                              .hass=${this.hass}
+                              .load=${load}
+                              @ilc-open-load=${this.redispatchLoadEvent}
+                              @ilc-edit-load=${this.redispatchEditEvent}
+                            ></ilc-load-summary-card>
+                          `,
+                        )}
+                      </div>
+                    </section>
+                  `,
+                )}
+              </div>
+            `}
       </section>
       <p class="updated" aria-live="polite">
         ${translate(this.hass, "status.updated", {
@@ -101,45 +139,27 @@ export class IlcOverviewPage extends LitElement {
     `;
   }
 
-  private renderMetrics(site: SiteSummary) {
-    const metrics: ReadonlyArray<readonly [string, string]> = [
-      [translate(this.hass, "site.import"), formatMeasurement(this.hass, site.grid_import)],
-      [translate(this.hass, "site.export"), formatMeasurement(this.hass, site.grid_export)],
-      [translate(this.hass, "site.solar"), formatMeasurement(this.hass, site.solar_production)],
-      [translate(this.hass, "site.controlled"), formatMeasurement(this.hass, site.controlled_power)],
-      [translate(this.hass, "site.activeLoads"), String(site.active_load_count)],
-      [translate(this.hass, "site.waitingLoads"), String(site.waiting_load_count)],
-      [translate(this.hass, "site.price"), formatCurrencyRate(this.hass, site.current_import_price)],
-      [translate(this.hass, "site.costToday"), formatCurrencyRate(this.hass, site.controlled_cost_today)],
-      [translate(this.hass, "site.energyToday"), formatMeasurement(this.hass, site.controlled_energy_today)],
-      [translate(this.hass, "site.nextDeadline"), formatDateTime(this.hass, site.next_deadline)],
-      [translate(this.hass, "site.health"), this.localizeHealth(site.health)],
-    ];
+  private readonly redispatchLoadEvent = (event: CustomEvent<{ loadId: string }>): void => {
+    event.stopPropagation();
+    this.dispatchEvent(
+      new CustomEvent("ilc-open-load", {
+        bubbles: true,
+        composed: true,
+        detail: event.detail,
+      }),
+    );
+  };
 
-    return html`
-      <section aria-labelledby="metrics-title">
-        <div class="section-header">
-          <h2 id="metrics-title">${translate(this.hass, "site.metrics")}</h2>
-        </div>
-        <div class="metric-grid">
-          ${metrics.map(
-            ([label, value]) => html`
-              <div class="panel-card metric">
-                <dl>
-                  <dt>${label}</dt>
-                  <dd>${value}</dd>
-                </dl>
-              </div>
-            `,
-          )}
-        </div>
-      </section>
-    `;
-  }
-
-  private localizeHealth(health: SiteSummary["health"]): string {
-    return translate(this.hass, `health.${health}` as Parameters<typeof translate>[1]);
-  }
+  private readonly redispatchEditEvent = (event: CustomEvent<{ loadId: string }>): void => {
+    event.stopPropagation();
+    this.dispatchEvent(
+      new CustomEvent("ilc-edit-load", {
+        bubbles: true,
+        composed: true,
+        detail: event.detail,
+      }),
+    );
+  };
 }
 
 declare global {

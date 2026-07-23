@@ -11,18 +11,21 @@ All notable changes will be documented here. The project intends to follow [Keep
 - UX redesign Phase 1 shell slice: route-aware Overview/Loads/load-detail/Plan/Insights/Settings/Diagnostics navigation, design tokens, shell/router/feedback/status primitives, and local visual baseline screenshots.
 - Read-only frontend diagnostics route and API facade convenience method.
 - Route-level page modules for Overview, Loads, load detail, Plan, Insights, Settings, and Diagnostics, plus shared load summary and plan table/proposal components.
+- UX redesign Phase 2 Overview starter slice: Home Status hero, live energy-flow summary, attention list, focused Today KPIs, grouped active/upcoming loads, and deterministic overview presentation helpers.
 
 ### Changed
 
 - Rebuilt the committed frontend bundle for the Phase 1 shell slice.
 - Local Playwright harness now feeds direct panel paths into the custom panel route property for route testing.
 - Reduced the root panel component by moving presentational page rendering, including Settings and load-detail controls, into dedicated modules.
+- Replaced the Overview equal-weight metric wall with a stronger everyday-operation hierarchy and more contextual load summary cards.
 
 ### Fixed
 
 - Guarded Apache ECharts initialization so repeated renders do not create duplicate chart instances.
 - Ensured dark-theme shell backgrounds fill the viewport on short pages.
 - Replaced raw JSON rendering for ordinary Insights daily summaries with labelled fields and a Diagnostics fallback for complex values.
+- Preserved optional site summary measurements in the frontend API facade so grid, solar, cost, energy, and deadline values render when the backend provides them.
 
 ## [0.2.0] - Initial 0.2 baseline
 

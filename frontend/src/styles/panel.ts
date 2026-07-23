@@ -147,6 +147,199 @@ export const panelStyles = [ilcDesignTokens, css`
       padding: 1rem;
     }
 
+    .home-status-hero {
+      background:
+        linear-gradient(
+          135deg,
+          color-mix(in srgb, var(--ilc-accent, var(--primary-color)) 14%, transparent),
+          transparent 62%
+        ),
+        var(--card-background-color);
+      border: 1px solid var(--divider-color);
+      border-radius: var(--ha-card-border-radius, 0.75rem);
+      display: grid;
+      gap: clamp(1rem, 3vw, 2rem);
+      grid-template-columns: minmax(0, 1fr) minmax(14rem, 0.34fr);
+      margin-block: 1rem;
+      padding: clamp(1rem, 3vw, 1.5rem);
+    }
+
+    .home-status-hero[data-level="critical"] {
+      border-inline-start: 0.35rem solid var(--ilc-status-danger, var(--error-color, var(--primary-color)));
+    }
+
+    .home-status-hero[data-level="warning"] {
+      border-inline-start: 0.35rem solid var(--ilc-status-warning, var(--warning-color, var(--primary-color)));
+    }
+
+    .hero-copy,
+    .hero-explainers,
+    .hero-values,
+    .attention-items,
+    .overview-load-groups {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .eyebrow-row {
+      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .eyebrow,
+    .attention-severity {
+      color: var(--secondary-text-color);
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .home-status-hero h2 {
+      font-size: clamp(1.75rem, 4vw, 3rem);
+      line-height: 1.05;
+    }
+
+    .hero-summary {
+      color: var(--primary-text-color);
+      font-size: clamp(1rem, 1.8vw, 1.2rem);
+      max-inline-size: 64rem;
+    }
+
+    .hero-explainers {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin: 0;
+    }
+
+    .hero-explainers div,
+    .hero-values div,
+    .kpi-card,
+    .energy-node {
+      background: color-mix(in srgb, var(--secondary-background-color) 72%, transparent);
+      border: 1px solid color-mix(in srgb, var(--divider-color) 74%, transparent);
+      border-radius: var(--ilc-radius-md, var(--ha-card-border-radius, 0.75rem));
+      min-inline-size: 0;
+      padding: 0.875rem;
+    }
+
+    .hero-explainers dt,
+    .hero-values span,
+    .kpi-card span,
+    .energy-node span,
+    .energy-node small {
+      color: var(--secondary-text-color);
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+
+    .hero-explainers dd,
+    .hero-values strong,
+    .kpi-card strong,
+    .energy-node strong {
+      display: block;
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin: 0.25rem 0 0;
+      overflow-wrap: anywhere;
+    }
+
+    .hero-values {
+      align-content: start;
+    }
+
+    .energy-flow-card {
+      overflow: hidden;
+    }
+
+    .energy-flow {
+      align-items: stretch;
+      display: grid;
+      gap: 0.75rem;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+    }
+
+    .energy-node {
+      border-block-start: 0.25rem solid var(--ilc-energy-controlled, var(--primary-color));
+      display: grid;
+      gap: 0.15rem;
+      min-block-size: 6rem;
+    }
+
+    .energy-node[data-kind="solar"] {
+      border-block-start-color: var(--ilc-energy-solar);
+    }
+
+    .energy-node[data-kind="grid"] {
+      border-block-start-color: var(--ilc-energy-grid-import);
+    }
+
+    .energy-node[data-kind="controlled"] {
+      border-block-start-color: var(--ilc-energy-controlled);
+    }
+
+    .flow-link {
+      align-self: center;
+      color: var(--secondary-text-color);
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+
+    .attention-list {
+      border-inline-start: 0.25rem solid var(--ilc-status-warning, var(--warning-color, var(--primary-color)));
+    }
+
+    .attention-item {
+      align-items: start;
+      background: var(--card-background-color);
+      border: 1px solid var(--divider-color);
+      border-radius: var(--ha-card-border-radius, 0.75rem);
+      display: flex;
+      gap: 1rem;
+      justify-content: space-between;
+      padding: 1rem;
+    }
+
+    .attention-item h3 {
+      margin-block: 0.15rem 0.35rem;
+    }
+
+    .attention-item[data-severity="critical"] {
+      border-inline-start: 0.25rem solid var(--ilc-status-danger, var(--error-color, var(--primary-color)));
+    }
+
+    .attention-item[data-severity="warning"] {
+      border-inline-start: 0.25rem solid var(--ilc-status-warning, var(--warning-color, var(--primary-color)));
+    }
+
+    .attention-item[data-severity="info"] {
+      border-inline-start: 0.25rem solid var(--ilc-status-info, var(--primary-color));
+    }
+
+    .kpi-grid {
+      display: grid;
+      gap: 0.875rem;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+
+    .kpi-card {
+      background: var(--card-background-color);
+      min-block-size: 6rem;
+    }
+
+    .overview-load-group {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    .overview-load-group h3 {
+      color: var(--secondary-text-color);
+      font-size: 0.92rem;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
     .chart-fallback {
       display: grid;
       gap: 1rem;
@@ -185,14 +378,59 @@ export const panelStyles = [ilcDesignTokens, css`
       padding: 1rem;
     }
 
+    .load-summary-card {
+      border-block-start: 0.25rem solid var(--divider-color);
+      display: grid;
+      gap: 0.85rem;
+    }
+
+    .load-summary-card[data-tone="danger"] {
+      border-block-start-color: var(--ilc-status-danger, var(--error-color, var(--primary-color)));
+    }
+
+    .load-summary-card[data-tone="warning"] {
+      border-block-start-color: var(--ilc-status-warning, var(--warning-color, var(--primary-color)));
+    }
+
+    .load-summary-card[data-tone="info"] {
+      border-block-start-color: var(--ilc-status-info, var(--primary-color));
+    }
+
+    .load-summary-card[data-tone="success"] {
+      border-block-start-color: var(--ilc-status-success, var(--success-color, var(--primary-color)));
+    }
+
     .load-header {
       align-items: flex-start;
-      margin-block-end: 0.75rem;
     }
 
     .load-header h3 {
       font-size: 1.125rem;
       overflow-wrap: anywhere;
+    }
+
+    .load-identity {
+      align-items: center;
+      display: flex;
+      gap: 0.75rem;
+      min-inline-size: 0;
+    }
+
+    .load-type-icon {
+      align-items: center;
+      background: color-mix(in srgb, var(--ilc-accent, var(--primary-color)) 14%, transparent);
+      border-radius: var(--ilc-radius-pill, 999px);
+      display: inline-flex;
+      flex: 0 0 auto;
+      font-size: 1.2rem;
+      inline-size: 2.4rem;
+      justify-content: center;
+      min-block-size: 2.4rem;
+    }
+
+    .load-state-phrase {
+      font-size: 1rem;
+      font-weight: 700;
     }
 
     .state-pill {
@@ -229,7 +467,6 @@ export const panelStyles = [ilcDesignTokens, css`
       display: grid;
       gap: 0.625rem;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      margin-block-start: 1rem;
     }
 
     .load-meta > div {
@@ -517,6 +754,34 @@ export const panelStyles = [ilcDesignTokens, css`
       margin-block: 0.75rem 1rem;
     }
 
+    @media (prefers-reduced-motion: reduce) {
+      .skeleton {
+        animation: none;
+      }
+    }
+
+    @media (min-width: 37.501rem) and (max-width: 63.99rem) {
+      .home-status-hero,
+      .hero-explainers,
+      .kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .hero-copy {
+        grid-column: 1 / -1;
+      }
+    }
+
+    @media (max-width: 75rem) {
+      .hero-explainers {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .kpi-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
     @media (max-width: 37.5rem) {
       .workspace-nav {
         background: color-mix(in srgb, var(--ilc-surface-card, var(--card-background-color)) 94%, transparent);
@@ -552,6 +817,21 @@ export const panelStyles = [ilcDesignTokens, css`
         grid-template-columns: 1fr;
       }
 
+      .home-status-hero {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-explainers,
+      .kpi-grid,
+      .energy-flow {
+        grid-template-columns: 1fr;
+      }
+
+      .flow-link {
+        justify-self: center;
+        transform: rotate(90deg);
+      }
+
       .summary-fields div {
         grid-template-columns: 1fr;
       }
@@ -559,12 +839,6 @@ export const panelStyles = [ilcDesignTokens, css`
       .form-actions > *,
       .override-actions > * {
         flex: 1 1 100%;
-      }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .skeleton {
-        animation: none;
       }
     }
   `];

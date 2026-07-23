@@ -4,6 +4,8 @@
 **Date:** 2026-07-23  
 **Scope:** Route-aware application shell foundation and visual baseline. This is a Phase 1 implementation slice, not final redesign completion.
 
+**Follow-up:** The subsequent Phase 2 starter slice begins replacing the legacy Overview hierarchy. See [Phase 2 Overview starter report](phase-2-overview-report.md) for current Overview evidence.
+
 ## Delivered in this slice
 
 - Added a typed route model for:
@@ -80,8 +82,8 @@ Browser console notes from Playwright:
 
 ## Known limits intentionally carried forward
 
-- Overview still uses the legacy equal-weight metric grid and generic load cards.
-- Load cards are not yet type-aware.
+- Overview-specific hierarchy is superseded by the Phase 2 starter report.
+- Load cards now have initial type-aware labels and vocabulary, but full backend presentation models remain future work.
 - Plan remains table-first/legacy.
 - Insights still uses a table layout, but ordinary daily summaries no longer render raw JSON.
 - Settings remains a form-first configuration page, not the guided wizard.

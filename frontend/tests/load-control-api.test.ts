@@ -42,6 +42,12 @@ describe("LoadControlApi", () => {
             active_loads: 1,
             waiting_loads: 0,
             total_controlled_power_w: 3400,
+            grid_import: { value: 500, unit: "W", quality: "measured" },
+            grid_export: { value: 0, unit: "W", quality: "measured" },
+            solar_production: { value: 2900, unit: "W", quality: "measured" },
+            controlled_energy_today: { value: 4.2, unit: "kWh", quality: "derived" },
+            controlled_cost_today: { value: 1.25, currency: "AUD", unit: "kWh", quality: "derived" },
+            next_deadline: "2026-07-23T20:00:00Z",
           };
         }
         return {
@@ -61,7 +67,16 @@ describe("LoadControlApi", () => {
 
     await expect(api.getSites()).resolves.toMatchObject([{ entry_id: "entry-home" }]);
     await expect(api.getDashboard("entry-home")).resolves.toMatchObject({
-      site: { site_id: "home", controller_state: "idle", active_load_count: 1 },
+      site: {
+        site_id: "home",
+        controller_state: "idle",
+        active_load_count: 1,
+        grid_import: { value: 500, unit: "W", quality: "measured" },
+        solar_production: { value: 2900, unit: "W", quality: "measured" },
+        controlled_energy_today: { value: 4.2, unit: "kWh", quality: "derived" },
+        controlled_cost_today: { value: 1.25, currency: "AUD", unit: "kWh", quality: "derived" },
+        next_deadline: "2026-07-23T20:00:00Z",
+      },
       loads: [{ load_id: "hws", load_type: "hot_water", controller_state: "idle" }],
     });
     expect(calls).toEqual(
