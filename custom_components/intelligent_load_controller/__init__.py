@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import homeassistant.helpers.config_validation as cv
 from typing import Any
 
+import homeassistant.helpers.config_validation as cv
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
