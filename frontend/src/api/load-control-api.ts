@@ -422,6 +422,10 @@ export class LoadControlApi {
     });
   }
 
+  public getDiagnostics(entryId: string): Promise<JsonObject> {
+    return this.request("diagnostics", { entry_id: entryId });
+  }
+
   /** Subscribe only to one site; event payloads are refreshed through reads. */
   public subscribeUpdates(
     entryId: string,

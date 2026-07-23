@@ -1,0 +1,88 @@
+# UX redesign Phase 1 shell report
+
+**Branch:** `ux-redesign-phase-1-shell`  
+**Date:** 2026-07-23  
+**Scope:** Route-aware application shell foundation and visual baseline. This is a Phase 1 implementation slice, not final redesign completion.
+
+## Delivered in this slice
+
+- Added a typed route model for:
+  - `/intelligent-load-controller`
+  - `/intelligent-load-controller/loads`
+  - `/intelligent-load-controller/loads/:loadId`
+  - `/intelligent-load-controller/plan`
+  - `/intelligent-load-controller/insights`
+  - `/intelligent-load-controller/settings`
+  - `/intelligent-load-controller/diagnostics`
+- Preserved compatibility aliases for existing `/dashboard`, `/history`, `/configure`, and `/load/:loadId` paths.
+- Added shell primitives under `frontend/src/app/`:
+  - `ilc-app-shell`
+  - `ilc-navigation`
+  - `ilc-router`
+- Added initial reusable feedback/status primitives:
+  - `ilc-alert`
+  - `ilc-empty-state`
+  - `ilc-status-pill`
+- Added semantic design tokens in `frontend/src/design/tokens.ts`.
+- Extracted legacy panel styles into `frontend/src/styles/panel.ts`.
+- Added a dedicated Loads route and read-only Diagnostics route while keeping existing page actions and backend calls intact.
+- Added URL writes for navigation clicks and browser `popstate` handling.
+- Updated the local Playwright harness so direct URLs can be tested.
+- Fixed a chart initialization race that produced duplicate Apache ECharts instance warnings during repeated renders.
+- Rebuilt the committed integration frontend bundle.
+
+No planner, electrical safety, actuator, override, or optimisation semantics were changed.
+
+## Source structure movement
+
+| Area | Before | After this slice |
+| --- | --- | --- |
+| Root panel | `frontend/src/components/intelligent-load-controller-panel.ts`, 2,494 lines at Phase 0 audit | 2,077 lines |
+| App shell/router | none | `frontend/src/app/`, 299 lines |
+| Shared style/tokens | placeholder only | `frontend/src/design/tokens.ts`, `frontend/src/styles/panel.ts` |
+| Feedback/status primitives | embedded in panel | `frontend/src/components/feedback/`, `frontend/src/components/status/` |
+
+The root panel remains too large and still owns page state, forms, and legacy page rendering. Further Phase 1 work should continue extracting page components and state boundaries before claiming the full Phase 1 exit gate.
+
+## Evidence
+
+| Check | Result |
+| --- | --- |
+| `npm --prefix frontend run typecheck` under Node 22.23.0 | Passed |
+| `npm --prefix frontend run test` under Node 22.23.0 | 3 files passed; 17 tests passed |
+| `scripts/build-frontend` under Node 22.23.0 | Passed |
+| `scripts/validate-frontend-bundle` | Passed; bundle size 1,605,270 bytes |
+| `npm --prefix frontend run test:e2e` under Node 22.23.0 | 4 Playwright tests passed |
+| Local visual baseline | 22 screenshots captured under `docs/ux/screenshots/phase-1-shell/` |
+
+Browser console notes from Playwright:
+
+- Expected local Vite/Lit dev-mode warning appears in dev-server runs.
+- The prior duplicate ECharts instance warning is no longer present after the chart creation guard.
+
+## Phase 1 exit-gate assessment
+
+| Gate | Assessment |
+| --- | --- |
+| Existing functionality remains reachable | Partially satisfied in fixture tests: dashboard, load controls, plan, insights/history, settings/configuration, diagnostics, and production no-blank paths remain reachable. Live HAOS validation remains required. |
+| Direct routes work | Partially satisfied: unit test covers `/loads/:loadId`; fixture screenshots cover all top-level routes. Live HAOS refresh/back-forward evidence remains required. |
+| Mobile navigation works | Partially satisfied: screenshots cover 320×700 and 390×844 with the bottom primary nav. Touch/keyboard walkthrough remains required. |
+| No regression to blank-page handling | Satisfied for local evidence: production-bundle Playwright tests passed, including optional chart failure fallback. |
+| Root panel is no longer a mega-component | Not yet satisfied. CSS, shell, router, and primitive components are extracted, but root panel remains 2,077 lines and still owns page renderers/state. |
+| Visual regression baselines exist | Partially satisfied: local fixture baselines exist for core routes/viewports/themes. Live HAOS and richer state baselines remain required. |
+
+## Known limits intentionally carried forward
+
+- Overview still uses the legacy equal-weight metric grid and generic load cards.
+- Load cards are not yet type-aware.
+- Plan and Insights remain table-first/legacy presentations.
+- Settings remains a form-first configuration page, not the guided wizard.
+- Diagnostics exposes raw data only in the explicitly developer-labelled route.
+- No live `https://home-dev.iot.delongis.net` evidence was captured in this slice because no credentials were available in the repo context.
+
+## Recommended next work
+
+1. Continue Phase 1 by extracting page renderers into `frontend/src/pages/` and shared state into `frontend/src/state/`.
+2. Add route-level Playwright tests for Overview, Loads, load detail, Plan, Insights, Settings, and Diagnostics.
+3. Add keyboard-focused navigation tests and mobile touch-target checks.
+4. Start Phase 2 Overview work only after the shell/page boundaries are stable enough that the hero, attention feed, and load cards do not deepen the root component again.

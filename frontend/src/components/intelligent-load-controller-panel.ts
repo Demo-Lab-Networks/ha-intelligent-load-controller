@@ -1,6 +1,17 @@
-import { css, html, LitElement, nothing, type PropertyValues } from "lit";
+import { html, LitElement, nothing, type PropertyValues } from "lit";
 import { property, query, state } from "lit/decorators.js";
 
+import "../app/ilc-app-shell";
+import "../app/ilc-navigation";
+import "../components/feedback/ilc-alert";
+import "../components/feedback/ilc-empty-state";
+import "../components/status/ilc-status-pill";
+import {
+  normaliseBasePath,
+  parseIlcRoute,
+  routePathForState,
+  type IlcWorkspaceView,
+} from "../app/ilc-router";
 import {
   LoadControlApi,
   LoadControlApiError,
@@ -30,12 +41,13 @@ import type {
   PanelInfo,
   PanelRoute,
 } from "../types/home-assistant";
+import { panelStyles } from "../styles/panel";
 import { formatCurrencyRate, formatDateTime, formatMeasurement } from "../utils/format";
 
 type ViewState = "loading" | "reconnecting" | "error" | "no_sites" | "select_site" | "empty" | "ready";
 type ChartComponentState = "loading" | "ready" | "failed";
 type SiteChoice = SiteSummaryResponse & { entry_id: string };
-type WorkspaceView = "dashboard" | "plan" | "history" | "configure" | "load";
+type WorkspaceView = IlcWorkspaceView;
 type EditableConfig = Record<string, JsonValue>;
 
 interface DeleteConfirmation {
@@ -45,488 +57,7 @@ interface DeleteConfirmation {
 }
 
 export class IntelligentLoadControllerPanel extends LitElement {
-  public static override styles = css`
-    :host {
-      box-sizing: border-box;
-      color: var(--primary-text-color);
-      display: block;
-      min-block-size: 100%;
-      background: var(--primary-background-color);
-      font-family: var(--paper-font-body1_-_font-family, sans-serif);
-    }
-
-    *,
-    *::before,
-    *::after {
-      box-sizing: inherit;
-    }
-
-    main {
-      margin: 0 auto;
-      max-inline-size: 100rem;
-      padding: clamp(1rem, 3vw, 2rem);
-    }
-
-    .page-header,
-    .section-header,
-    .load-header,
-    .status-banner,
-    .metric {
-      align-items: center;
-      display: flex;
-      gap: 0.75rem;
-      justify-content: space-between;
-    }
-
-    .page-header {
-      align-items: flex-start;
-      margin-block-end: 1.5rem;
-    }
-
-    h1,
-    h2,
-    h3,
-    p {
-      margin: 0;
-    }
-
-    h1 {
-      font-size: clamp(1.5rem, 3vw, 2.25rem);
-      line-height: 1.2;
-    }
-
-    h2 {
-      font-size: 1.125rem;
-    }
-
-    .secondary,
-    .metric dt,
-    .load-meta dt,
-    .reason,
-    .updated {
-      color: var(--secondary-text-color);
-    }
-
-    .refresh-button,
-    .retry-button {
-      align-items: center;
-      background: var(--primary-color);
-      border: 0;
-      border-radius: var(--ha-card-border-radius, 0.75rem);
-      color: var(--text-primary-color, var(--primary-text-color));
-      cursor: pointer;
-      display: inline-flex;
-      font: inherit;
-      justify-content: center;
-      min-block-size: 2.75rem;
-      min-inline-size: 2.75rem;
-      padding: 0.5rem 1rem;
-    }
-
-    .refresh-button[disabled],
-    .retry-button[disabled] {
-      cursor: not-allowed;
-      opacity: 0.6;
-    }
-
-    button:focus-visible {
-      outline: 0.1875rem solid var(--secondary-color);
-      outline-offset: 0.1875rem;
-    }
-
-    .status-banner,
-    .panel-card,
-    .load-card {
-      background: var(--card-background-color);
-      border: 1px solid var(--divider-color);
-      border-radius: var(--ha-card-border-radius, 0.75rem);
-    }
-
-    .status-banner {
-      border-inline-start: 0.25rem solid var(--info-color, var(--primary-color));
-      margin-block: 1rem;
-      padding: 1rem;
-    }
-
-    .status-banner[data-state="error"] {
-      border-inline-start-color: var(--error-color, var(--primary-color));
-    }
-
-    .status-banner[data-state="reconnecting"] {
-      border-inline-start-color: var(--warning-color, var(--primary-color));
-    }
-
-    .skeleton-grid,
-    .metric-grid,
-    .load-grid {
-      display: grid;
-      gap: 0.875rem;
-      grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
-    }
-
-    .skeleton {
-      animation: pulse 1.6s ease-in-out infinite;
-      background: var(--divider-color);
-      border-radius: var(--ha-card-border-radius, 0.75rem);
-      min-block-size: 7rem;
-    }
-
-    @keyframes pulse {
-      50% {
-        opacity: 0.45;
-      }
-    }
-
-    .panel-card {
-      margin-block: 1rem;
-      padding: 1rem;
-    }
-
-    .chart-fallback {
-      display: grid;
-      gap: 1rem;
-    }
-
-    .metric {
-      align-items: flex-start;
-      flex-direction: column;
-      min-block-size: 6.5rem;
-      padding: 1rem;
-    }
-
-    .metric dd,
-    .load-meta dd {
-      font-size: 1.125rem;
-      font-weight: 600;
-      margin: 0;
-      overflow-wrap: anywhere;
-    }
-
-    .metric dl,
-    .load-meta {
-      margin: 0;
-    }
-
-    .section-header {
-      margin-block-end: 1rem;
-    }
-
-    .load-grid {
-      grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
-    }
-
-    .load-card {
-      min-inline-size: 0;
-      padding: 1rem;
-    }
-
-    .load-header {
-      align-items: flex-start;
-      margin-block-end: 0.75rem;
-    }
-
-    .load-header h3 {
-      font-size: 1.125rem;
-      overflow-wrap: anywhere;
-    }
-
-    .state-pill {
-      background: var(--secondary-background-color);
-      border-radius: 999px;
-      color: var(--secondary-text-color);
-      display: inline-flex;
-      font-size: 0.8125rem;
-      padding: 0.25rem 0.5rem;
-      text-align: end;
-    }
-
-    .load-meta {
-      display: grid;
-      gap: 0.625rem;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      margin-block-start: 1rem;
-    }
-
-    .load-meta > div {
-      min-inline-size: 0;
-    }
-
-    .fault {
-      color: var(--error-color, var(--primary-text-color));
-      font-weight: 600;
-    }
-
-    .empty-state {
-      display: grid;
-      gap: 0.75rem;
-      justify-items: start;
-      min-block-size: 14rem;
-      place-content: center start;
-    }
-
-    .site-selector {
-      display: grid;
-      gap: 1rem;
-      max-inline-size: 34rem;
-    }
-
-    .site-selector label {
-      display: grid;
-      font-weight: 600;
-      gap: 0.5rem;
-    }
-
-    .site-selector select {
-      background: var(--card-background-color);
-      border: 1px solid var(--divider-color);
-      border-radius: var(--ha-card-border-radius, 0.75rem);
-      color: var(--primary-text-color);
-      font: inherit;
-      min-block-size: 2.75rem;
-      padding-inline: 0.75rem;
-    }
-
-    .site-selector select:focus-visible {
-      outline: 0.1875rem solid var(--secondary-color);
-      outline-offset: 0.1875rem;
-    }
-
-    .updated {
-      font-size: 0.875rem;
-      margin-block-start: 1rem;
-    }
-
-    .workspace-nav {
-      display: flex;
-      gap: 0.5rem;
-      margin-block: 0 1rem;
-      overflow-x: auto;
-      padding-block-end: 0.25rem;
-    }
-
-    .nav-button,
-    .secondary-button,
-    .danger-button,
-    .primary-button,
-    .text-button {
-      align-items: center;
-      background: var(--secondary-background-color);
-      border: 1px solid var(--divider-color);
-      border-radius: var(--ha-card-border-radius, 0.75rem);
-      color: var(--primary-text-color);
-      cursor: pointer;
-      display: inline-flex;
-      font: inherit;
-      justify-content: center;
-      min-block-size: 2.75rem;
-      padding: 0.5rem 0.875rem;
-      text-align: center;
-    }
-
-    .nav-button {
-      flex: 0 0 auto;
-    }
-
-    .nav-button[aria-current="page"],
-    .primary-button {
-      background: var(--primary-color);
-      border-color: var(--primary-color);
-      color: var(--text-primary-color, var(--primary-text-color));
-    }
-
-    .danger-button {
-      border-color: var(--error-color, var(--primary-color));
-      color: var(--error-color, var(--primary-text-color));
-    }
-
-    .text-button {
-      background: transparent;
-      border-color: transparent;
-      color: var(--primary-color);
-      padding-inline: 0.25rem;
-    }
-
-    .nav-button[disabled],
-    .secondary-button[disabled],
-    .danger-button[disabled],
-    .primary-button[disabled],
-    .text-button[disabled] {
-      cursor: not-allowed;
-      opacity: 0.6;
-    }
-
-    .card-actions,
-    .form-actions,
-    .inline-actions,
-    .override-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.625rem;
-    }
-
-    .card-actions {
-      margin-block-start: 1rem;
-    }
-
-    .form-grid {
-      display: grid;
-      gap: 0.875rem;
-      grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
-    }
-
-    .form-field {
-      display: grid;
-      font-weight: 600;
-      gap: 0.375rem;
-      min-inline-size: 0;
-    }
-
-    .form-field input,
-    .form-field select {
-      background: var(--primary-background-color);
-      border: 1px solid var(--divider-color);
-      border-radius: var(--ha-card-border-radius, 0.5rem);
-      color: var(--primary-text-color);
-      font: inherit;
-      inline-size: 100%;
-      min-block-size: 2.75rem;
-      padding-inline: 0.75rem;
-    }
-
-    .form-field input[type="checkbox"] {
-      accent-color: var(--primary-color);
-      block-size: 1.25rem;
-      inline-size: 1.25rem;
-      min-block-size: auto;
-      padding: 0;
-    }
-
-    .checkbox-field {
-      align-items: center;
-      display: flex;
-      gap: 0.625rem;
-      min-block-size: 2.75rem;
-    }
-
-    .form-field input:focus-visible,
-    .form-field select:focus-visible {
-      outline: 0.1875rem solid var(--secondary-color);
-      outline-offset: 0.125rem;
-    }
-
-    .section-copy {
-      margin-block-end: 1rem;
-    }
-
-    .action-status {
-      margin-block: 0 1rem;
-    }
-
-    .issue-list {
-      margin: 0.75rem 0 0;
-      padding-inline-start: 1.25rem;
-    }
-
-    .issue-path {
-      color: var(--secondary-text-color);
-      font-size: 0.875rem;
-    }
-
-    .table-wrap {
-      max-inline-size: 100%;
-      overflow-x: auto;
-    }
-
-    table {
-      border-collapse: collapse;
-      inline-size: 100%;
-      min-inline-size: 34rem;
-    }
-
-    th,
-    td {
-      border-block-end: 1px solid var(--divider-color);
-      padding: 0.625rem;
-      text-align: start;
-      vertical-align: top;
-    }
-
-    th {
-      color: var(--secondary-text-color);
-      font-size: 0.875rem;
-      font-weight: 600;
-    }
-
-    .plan-summary {
-      display: grid;
-      gap: 0.5rem;
-      margin-block-end: 1rem;
-    }
-
-    details summary {
-      cursor: pointer;
-      font-weight: 600;
-    }
-
-    details pre {
-      background: var(--secondary-background-color);
-      border-radius: var(--ha-card-border-radius, 0.5rem);
-      max-block-size: 20rem;
-      overflow: auto;
-      padding: 0.75rem;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-
-    .dialog-backdrop {
-      align-items: center;
-      background: color-mix(in srgb, var(--primary-background-color) 45%, transparent);
-      display: flex;
-      inset: 0;
-      justify-content: center;
-      padding: 1rem;
-      position: fixed;
-      z-index: 10;
-    }
-
-    .dialog-card {
-      background: var(--card-background-color);
-      border: 1px solid var(--divider-color);
-      border-radius: var(--ha-card-border-radius, 0.75rem);
-      box-shadow: var(--ha-card-box-shadow, 0 0.25rem 1rem rgb(0 0 0 / 0.25));
-      max-inline-size: 32rem;
-      padding: 1.25rem;
-    }
-
-    .dialog-card p {
-      margin-block: 0.75rem 1rem;
-    }
-
-    @media (max-width: 37.5rem) {
-      .page-header {
-        flex-direction: column;
-      }
-
-      .refresh-button {
-        inline-size: 100%;
-      }
-
-      .load-meta {
-        grid-template-columns: 1fr;
-      }
-
-      .form-actions > *,
-      .override-actions > * {
-        flex: 1 1 100%;
-      }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .skeleton {
-        animation: none;
-      }
-    }
-  `;
+  public static override styles = panelStyles;
 
   /** Home Assistant injects this property when it instantiates the panel. */
   @property({ attribute: false }) public hass?: HomeAssistant;
@@ -557,6 +88,7 @@ export class IntelligentLoadControllerPanel extends LitElement {
   @state() private history?: HistoricalSummaryResponse;
   @state() private events?: readonly EventJournalEntry[];
   @state() private loadDetail?: JsonObject;
+  @state() private diagnostics?: JsonObject;
   @state() private sectionLoading?: WorkspaceView;
   @state() private actionMessage?: string;
   @state() private actionError?: string;
@@ -588,18 +120,23 @@ export class IntelligentLoadControllerPanel extends LitElement {
       this.viewState = "reconnecting";
     }
   };
+  private readonly onPopState = (): void => {
+    this.syncRoute(window.location.pathname);
+  };
 
   public override connectedCallback(): void {
     super.connectedCallback();
     this.loadChartComponent();
     window.addEventListener("online", this.onNetworkChange);
     window.addEventListener("offline", this.onNetworkChange);
+    window.addEventListener("popstate", this.onPopState);
   }
 
   public override disconnectedCallback(): void {
     this.unsubscribeUpdates();
     window.removeEventListener("online", this.onNetworkChange);
     window.removeEventListener("offline", this.onNetworkChange);
+    window.removeEventListener("popstate", this.onPopState);
     super.disconnectedCallback();
   }
 
@@ -718,28 +255,17 @@ export class IntelligentLoadControllerPanel extends LitElement {
 
   protected override render() {
     return html`
-      <main aria-busy=${String(this.refreshing || this.viewState === "loading")}>
-        ${this.renderHeader()} ${this.renderBody()}
-      </main>
-    `;
-  }
-
-  private renderHeader() {
-    return html`
-      <header class="page-header">
-        <div>
-          <h1>${this.pageTitle()}</h1>
-          <p class="secondary">${this.dashboard?.site.name ?? translate(this.hass, "app.title")}</p>
-        </div>
-        <button
-          class="refresh-button"
-          type="button"
-          ?disabled=${this.refreshing || !this.isWebsocketConnected()}
-          @click=${() => void this.refresh()}
-        >
-          ${translate(this.hass, "status.refresh")}
-        </button>
-      </header>
+      <ilc-app-shell
+        .hass=${this.hass}
+        .pageTitle=${this.pageTitle()}
+        .subtitle=${this.dashboard?.site.name ?? translate(this.hass, "app.title")}
+        .refreshing=${this.refreshing}
+        .connected=${this.isWebsocketConnected()}
+        .busy=${this.refreshing || this.viewState === "loading"}
+        @ilc-refresh=${() => void this.refresh()}
+      >
+        ${this.renderBody()}
+      </ilc-app-shell>
     `;
   }
 
@@ -763,37 +289,29 @@ export class IntelligentLoadControllerPanel extends LitElement {
 
   private renderWorkspace(dashboard: DashboardData) {
     return html`
-      <nav class="workspace-nav" aria-label=${translate(this.hass, "nav.label")}>
-        ${this.renderNavigationButton("dashboard", "nav.dashboard")}
-        ${this.renderNavigationButton("plan", "nav.plan")}
-        ${this.renderNavigationButton("history", "nav.history")}
-        ${this.renderNavigationButton("configure", "nav.configure")}
-      </nav>
+      <ilc-navigation
+        slot="navigation"
+        .hass=${this.hass}
+        .activeView=${this.workspaceView}
+        .disabled=${this.refreshing}
+        @ilc-navigate=${this.handleNavigation}
+      ></ilc-navigation>
       ${this.renderActionStatus()}
       ${this.sectionLoading === this.workspaceView ? this.renderSectionLoading() : nothing}
       ${this.workspaceView === "dashboard"
         ? this.renderDashboard(dashboard)
+        : this.workspaceView === "loads"
+          ? this.renderLoads(dashboard)
         : this.workspaceView === "plan"
           ? this.renderPlan()
           : this.workspaceView === "history"
             ? this.renderHistory()
             : this.workspaceView === "configure"
               ? this.renderConfiguration()
+              : this.workspaceView === "diagnostics"
+                ? this.renderDiagnostics()
               : this.renderLoadControls(dashboard)}
       ${this.renderDeleteConfirmation()}
-    `;
-  }
-
-  private renderNavigationButton(view: Exclude<WorkspaceView, "load">, label: Parameters<typeof translate>[1]) {
-    return html`
-      <button
-        class="nav-button"
-        type="button"
-        aria-current=${this.workspaceView === view ? "page" : nothing}
-        @click=${() => void this.selectWorkspaceView(view)}
-      >
-        ${translate(this.hass, label)}
-      </button>
     `;
   }
 
@@ -820,11 +338,7 @@ export class IntelligentLoadControllerPanel extends LitElement {
   }
 
   private renderSectionLoading() {
-    return html`
-      <section class="status-banner" aria-live="polite">
-        <p>${translate(this.hass, "status.loadingSection")}</p>
-      </section>
-    `;
+    return html`<ilc-alert .message=${translate(this.hass, "status.loadingSection")}></ilc-alert>`;
   }
 
   private renderLoading() {
@@ -843,12 +357,12 @@ export class IntelligentLoadControllerPanel extends LitElement {
 
   private renderReconnecting() {
     return html`
-      <section class="status-banner" data-state="reconnecting" aria-live="assertive">
-        <div>
-          <h2>${translate(this.hass, "status.reconnecting")}</h2>
-          <p class="secondary">${translate(this.hass, "status.connectionHint")}</p>
-        </div>
-      </section>
+      <ilc-alert
+        tone="reconnecting"
+        live="assertive"
+        .heading=${translate(this.hass, "status.reconnecting")}
+        .message=${translate(this.hass, "status.connectionHint")}
+      ></ilc-alert>
     `;
   }
 
@@ -868,19 +382,19 @@ export class IntelligentLoadControllerPanel extends LitElement {
 
   private renderEmpty() {
     return html`
-      <section class="panel-card empty-state" aria-live="polite">
-        <h2>${translate(this.hass, "status.empty")}</h2>
-        <p class="secondary">${translate(this.hass, "status.emptyHint")}</p>
-      </section>
+      <ilc-empty-state
+        .heading=${translate(this.hass, "status.empty")}
+        .message=${translate(this.hass, "status.emptyHint")}
+      ></ilc-empty-state>
     `;
   }
 
   private renderNoSites() {
     return html`
-      <section class="panel-card empty-state" aria-live="polite">
-        <h2>${translate(this.hass, "status.noSites")}</h2>
-        <p class="secondary">${translate(this.hass, "status.noSitesHint")}</p>
-      </section>
+      <ilc-empty-state
+        .heading=${translate(this.hass, "status.noSites")}
+        .message=${translate(this.hass, "status.noSitesHint")}
+      ></ilc-empty-state>
     `;
   }
 
@@ -936,6 +450,25 @@ export class IntelligentLoadControllerPanel extends LitElement {
           time: formatDateTime(this.hass, dashboard.site.updated_at),
         })}
       </p>
+    `;
+  }
+
+  private renderLoads(dashboard: DashboardData) {
+    return html`
+      <section aria-labelledby="loads-catalogue-title">
+        <div class="section-header">
+          <div>
+            <h2 id="loads-catalogue-title">${translate(this.hass, "load.catalogue")}</h2>
+            <p class="secondary">${translate(this.hass, "load.catalogueHint")}</p>
+          </div>
+          <span class="secondary">${dashboard.loads.length}</span>
+        </div>
+        ${dashboard.loads.length === 0
+          ? this.renderEmpty()
+          : html`<div class="load-grid">
+              ${dashboard.loads.map((load) => this.renderLoadCard(load))}
+            </div>`}
+      </section>
     `;
   }
 
@@ -1038,7 +571,9 @@ export class IntelligentLoadControllerPanel extends LitElement {
             <h3 id="load-${load.load_id}">${load.name}</h3>
             <p class="secondary">${load.load_type}</p>
           </div>
-          <span class="state-pill">${localizeControllerState(this.hass, load.controller_state)}</span>
+          <ilc-status-pill
+            .label=${localizeControllerState(this.hass, load.controller_state)}
+          ></ilc-status-pill>
         </div>
         <p class="reason">${localizeReasonCode(this.hass, load.reason_code)}</p>
         ${load.fault
@@ -1246,6 +781,28 @@ export class IntelligentLoadControllerPanel extends LitElement {
     `;
   }
 
+  private renderDiagnostics() {
+    const diagnostics = this.diagnostics;
+    return html`
+      <section class="panel-card" aria-labelledby="diagnostics-title">
+        <div class="section-header">
+          <div>
+            <h2 id="diagnostics-title">${translate(this.hass, "diagnostics.title")}</h2>
+            <p class="secondary">${translate(this.hass, "diagnostics.description")}</p>
+          </div>
+        </div>
+        ${diagnostics
+          ? html`
+              <details open>
+                <summary>${translate(this.hass, "diagnostics.raw")}</summary>
+                <pre>${JSON.stringify(diagnostics, null, 2)}</pre>
+              </details>
+            `
+          : html`<p class="secondary">${translate(this.hass, "diagnostics.unavailable")}</p>`}
+      </section>
+    `;
+  }
+
   private renderHistoricalSummaries(summaries: readonly JsonObject[]) {
     if (summaries.length === 0) {
       return html`<p class="secondary">${translate(this.hass, "status.noHistory")}</p>`;
@@ -1317,7 +874,7 @@ export class IntelligentLoadControllerPanel extends LitElement {
     if (!configuration) {
       return html`
         <section class="panel-card empty-state" aria-live="polite">
-          <h2>${translate(this.hass, "app.configure")}</h2>
+          <h2>${translate(this.hass, "app.settings")}</h2>
           <button class="secondary-button" type="button" @click=${() => void this.reloadConfiguration()}>
             ${translate(this.hass, "status.retry")}
           </button>
@@ -1639,8 +1196,8 @@ export class IntelligentLoadControllerPanel extends LitElement {
         <section class="panel-card empty-state" aria-live="polite">
           <h2>${translate(this.hass, "load.details")}</h2>
           <p class="secondary">${translate(this.hass, "value.unavailable")}</p>
-          <button class="secondary-button" type="button" @click=${() => void this.selectWorkspaceView("dashboard")}>
-            ${translate(this.hass, "nav.dashboard")}
+          <button class="secondary-button" type="button" @click=${() => void this.selectWorkspaceView("loads")}>
+            ${translate(this.hass, "nav.loads")}
           </button>
         </section>
       `;
@@ -1652,8 +1209,8 @@ export class IntelligentLoadControllerPanel extends LitElement {
             <h2 id="load-controls-title">${load.name}</h2>
             <p class="secondary">${translate(this.hass, "load.details")}</p>
           </div>
-          <button class="text-button" type="button" @click=${() => void this.selectWorkspaceView("dashboard")}>
-            ${translate(this.hass, "nav.dashboard")}
+          <button class="text-button" type="button" @click=${() => void this.selectWorkspaceView("loads")}>
+            ${translate(this.hass, "nav.loads")}
           </button>
         </div>
         <p class="reason">${localizeReasonCode(this.hass, load.reason_code)}</p>
@@ -1741,11 +1298,25 @@ export class IntelligentLoadControllerPanel extends LitElement {
     return html`<div><dt>${label}</dt><dd>${value}</dd></div>`;
   }
 
-  private async selectWorkspaceView(view: WorkspaceView): Promise<void> {
+  private readonly handleNavigation = (event: Event): void => {
+    const detail = (event as CustomEvent<{ view?: WorkspaceView }>).detail;
+    if (!detail?.view) {
+      return;
+    }
+    void this.selectWorkspaceView(detail.view);
+  };
+
+  private async selectWorkspaceView(view: WorkspaceView, pushRoute = true): Promise<void> {
     this.workspaceView = view;
+    if (view !== "load") {
+      this.selectedLoadId = undefined;
+    }
     this.actionMessage = undefined;
     this.actionError = undefined;
     this.actionErrorCode = undefined;
+    if (pushRoute) {
+      this.pushRoute({ view });
+    }
     await this.ensureWorkspaceData(view);
   }
 
@@ -1787,6 +1358,8 @@ export class IntelligentLoadControllerPanel extends LitElement {
         ]);
         this.history = history;
         this.events = eventJournal.events;
+      } else if (view === "diagnostics") {
+        this.diagnostics = await api.getDiagnostics(entryId);
       } else if (view === "load" && this.selectedLoadId) {
         this.loadDetail = await api.getLoadDetail(entryId, this.selectedLoadId);
       }
@@ -1809,6 +1382,10 @@ export class IntelligentLoadControllerPanel extends LitElement {
         return this.currentPlan !== undefined || this.dailyTimeline !== undefined;
       case "history":
         return this.history !== undefined || this.events !== undefined;
+      case "diagnostics":
+        return this.diagnostics !== undefined;
+      case "loads":
+        return true;
       case "load":
         return this.loadDetail !== undefined;
     }
@@ -2069,6 +1646,7 @@ export class IntelligentLoadControllerPanel extends LitElement {
     this.selectedLoadId = loadId;
     this.workspaceView = "load";
     this.loadDetail = undefined;
+    this.pushRoute({ view: "load", loadId });
     await this.ensureWorkspaceData("load", true);
   }
 
@@ -2204,6 +1782,7 @@ export class IntelligentLoadControllerPanel extends LitElement {
     this.history = undefined;
     this.events = undefined;
     this.loadDetail = undefined;
+    this.diagnostics = undefined;
     this.sectionLoading = undefined;
     this.actionMessage = undefined;
     this.actionError = undefined;
@@ -2318,28 +1897,28 @@ export class IntelligentLoadControllerPanel extends LitElement {
     }
   };
 
-  private syncRoute(): void {
-    const path = this.route?.path ?? "";
-    const loadMatch = /\/load\/([^/?#]+)/u.exec(path);
-    if (loadMatch?.[1]) {
-      this.workspaceView = "load";
-      try {
-        this.selectedLoadId = decodeURIComponent(loadMatch[1]);
-      } catch {
-        this.selectedLoadId = loadMatch[1];
-      }
-    } else if (path.includes("/configure")) {
-      this.workspaceView = "configure";
-    } else if (path.includes("/history")) {
-      this.workspaceView = "history";
-    } else if (path.includes("/plan")) {
-      this.workspaceView = "plan";
-    } else if (path.includes("/dashboard")) {
-      this.workspaceView = "dashboard";
-    }
+  private syncRoute(path = this.route?.path ?? window.location.pathname): void {
+    const route = parseIlcRoute(path);
+    this.workspaceView = route.view;
+    this.selectedLoadId = route.loadId;
     if (this.hasLoaded && this.workspaceView !== "dashboard") {
       queueMicrotask(() => void this.ensureWorkspaceData(this.workspaceView));
     }
+  }
+
+  private pushRoute(route: Parameters<typeof routePathForState>[1]): void {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const nextPath = routePathForState(this.panelBasePath(), route);
+    if (window.location.pathname === nextPath) {
+      return;
+    }
+    window.history.pushState({}, "", nextPath);
+  }
+
+  private panelBasePath(): string {
+    return normaliseBasePath(this.route?.prefix ?? window.location.pathname);
   }
 
   private setActionSuccess(key: Parameters<typeof translate>[1]): void {
@@ -2426,14 +2005,18 @@ export class IntelligentLoadControllerPanel extends LitElement {
     switch (this.workspaceView) {
       case "load":
         return translate(this.hass, "app.loadRoute");
+      case "loads":
+        return translate(this.hass, "app.loads");
       case "plan":
         return translate(this.hass, "app.plan");
       case "history":
-        return translate(this.hass, "app.history");
+        return translate(this.hass, "app.insights");
       case "configure":
-        return translate(this.hass, "app.configure");
+        return translate(this.hass, "app.settings");
+      case "diagnostics":
+        return translate(this.hass, "app.diagnostics");
       case "dashboard":
-        return translate(this.hass, "app.siteDashboard");
+        return translate(this.hass, "app.overview");
     }
   }
 

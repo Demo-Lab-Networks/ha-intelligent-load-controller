@@ -30,6 +30,7 @@ export class IlcSiteSnapshotChart extends LitElement {
   private chart?: ECharts;
   private chartLibrary?: EchartsCoreModule;
   private chartLoad?: Promise<EchartsCoreModule>;
+  private chartCreate?: Promise<void>;
   private resizeObserver?: ResizeObserver;
 
   protected override firstUpdated(): void {
@@ -44,6 +45,7 @@ export class IlcSiteSnapshotChart extends LitElement {
     this.resizeObserver?.disconnect();
     this.chart?.dispose();
     this.chart = undefined;
+    this.chartCreate = undefined;
     super.disconnectedCallback();
   }
 
@@ -68,8 +70,21 @@ export class IlcSiteSnapshotChart extends LitElement {
       return;
     }
 
+    if (this.chartCreate) {
+      await this.chartCreate;
+      return;
+    }
+
+    this.chartCreate = this.initialiseChart();
+    await this.chartCreate;
+  }
+
+  private async initialiseChart(): Promise<void> {
     try {
       const echarts = await this.loadChartLibrary();
+      if (!this.chartElement || this.chart) {
+        return;
+      }
       this.chart = echarts.init(this.chartElement, undefined, { renderer: "svg" });
       if (typeof ResizeObserver !== "undefined") {
         this.resizeObserver = new ResizeObserver(() => this.chart?.resize());

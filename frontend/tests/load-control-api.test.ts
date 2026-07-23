@@ -110,6 +110,7 @@ describe("LoadControlApi", () => {
     await api.deleteLoad("entry-home", "load-1", 8);
     await api.startOverride("entry-home", "load-1", "on", { duration_seconds: 1_800 });
     await api.setAutomaticControl("entry-home", "load-1", false, 8);
+    await api.getDiagnostics("entry-home");
     await expect(api.getCurrentPlan("entry-home")).resolves.toBeNull();
 
     expect(calls).toEqual(
@@ -152,6 +153,10 @@ describe("LoadControlApi", () => {
           load_id: "load-1",
           enabled: false,
           if_revision: 8,
+        },
+        {
+          type: "intelligent_load_controller/v1/diagnostics",
+          entry_id: "entry-home",
         },
         {
           type: "intelligent_load_controller/v1/current_plan",

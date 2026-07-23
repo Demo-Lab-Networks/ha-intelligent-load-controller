@@ -72,4 +72,9 @@ const hass: HomeAssistant = {
 
 const panel = document.createElement("intelligent-load-controller-panel");
 panel.hass = hass;
+panel.route = { path: window.location.pathname, prefix: "/intelligent-load-controller" };
 document.body.append(panel);
+
+window.addEventListener("popstate", () => {
+  panel.route = { path: window.location.pathname, prefix: "/intelligent-load-controller" };
+});
