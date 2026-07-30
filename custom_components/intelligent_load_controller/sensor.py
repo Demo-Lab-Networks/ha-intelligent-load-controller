@@ -137,7 +137,7 @@ _LOAD_SENSORS = (
         "Energy today",
         "energy_today_kwh",
         SensorDeviceClass.ENERGY,
-        SensorStateClass.MEASUREMENT,
+        SensorStateClass.TOTAL,
         UnitOfEnergy.KILO_WATT_HOUR,
         0,
     ),

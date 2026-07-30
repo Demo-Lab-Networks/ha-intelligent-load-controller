@@ -20,7 +20,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_state_change_event
 
@@ -381,6 +381,14 @@ class SiteCoordinator:
     def _schedule_replan(self, reason: str) -> None:
         """Coalesce event storms while preserving immediate state-driven control."""
 
+        self.hass.loop.call_soon_threadsafe(self._async_schedule_replan_on_loop, reason)
+
+    @callback
+    def _async_schedule_replan_on_loop(self, reason: str) -> None:
+        """Create the debounced replan task from the Home Assistant event loop."""
+
+        if not self._started:
+            return
         if self._replan_task is not None and not self._replan_task.done():
             return
 
