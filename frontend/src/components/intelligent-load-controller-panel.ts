@@ -35,8 +35,26 @@ import { formatCurrencyRate, formatDateTime, formatMeasurement } from "../utils/
 type ViewState = "loading" | "reconnecting" | "error" | "no_sites" | "select_site" | "empty" | "ready";
 type ChartComponentState = "loading" | "ready" | "failed";
 type SiteChoice = SiteSummaryResponse & { entry_id: string };
-type WorkspaceView = "dashboard" | "plan" | "history" | "configure" | "load";
+type WorkspaceView = "overview" | "loads" | "plan" | "site" | "settings" | "history" | "load";
 type EditableConfig = Record<string, JsonValue>;
+
+const ROUTES = {
+  overview: "",
+  loads: "loads",
+  plan: "plan",
+  site: "site",
+  settings: "settings",
+  history: "history",
+  load: "load",
+} as const;
+
+const PRIMARY_NAV: ReadonlyArray<Exclude<WorkspaceView, "history" | "load">> = [
+  "overview",
+  "loads",
+  "plan",
+  "site",
+  "settings",
+];
 
 interface DeleteConfirmation {
   loadId: string;
@@ -97,6 +115,13 @@ export class IntelligentLoadControllerPanel extends LitElement {
 
     h2 {
       font-size: 1.125rem;
+    }
+
+    .product-title {
+      color: var(--secondary-text-color);
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin-block-end: 0.25rem;
     }
 
     .secondary,
@@ -254,6 +279,39 @@ export class IntelligentLoadControllerPanel extends LitElement {
     .fault {
       color: var(--error-color, var(--primary-text-color));
       font-weight: 600;
+    }
+
+    .chip-row,
+    .compact-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .compact-list {
+      flex-direction: column;
+    }
+
+    .list-row {
+      align-items: center;
+      background: var(--secondary-background-color);
+      border: 1px solid var(--divider-color);
+      border-radius: var(--ha-card-border-radius, 0.5rem);
+      color: var(--primary-text-color);
+      cursor: pointer;
+      display: flex;
+      font: inherit;
+      gap: 1rem;
+      justify-content: space-between;
+      min-block-size: 3rem;
+      padding: 0.75rem;
+      text-align: start;
+    }
+
+    .list-row > span:first-child {
+      display: grid;
+      gap: 0.25rem;
+      min-inline-size: 0;
     }
 
     .empty-state {
@@ -437,6 +495,19 @@ export class IntelligentLoadControllerPanel extends LitElement {
       overflow-x: auto;
     }
 
+    .interval-list {
+      display: grid;
+      gap: 0.75rem;
+      margin-block-end: 1rem;
+    }
+
+    .interval-card {
+      background: var(--secondary-background-color);
+      border: 1px solid var(--divider-color);
+      border-radius: var(--ha-card-border-radius, 0.5rem);
+      padding: 0.75rem;
+    }
+
     table {
       border-collapse: collapse;
       inline-size: 100%;
@@ -546,7 +617,7 @@ export class IntelligentLoadControllerPanel extends LitElement {
   @state() private refreshing = false;
   @state() private availableSites: readonly SiteChoice[] = [];
   @state() private selectedEntryId?: string;
-  @state() private workspaceView: WorkspaceView = "dashboard";
+  @state() private workspaceView: WorkspaceView = "overview";
   @state() private selectedLoadId?: string;
   @state() private configuration?: ConfigurationReadResponse;
   @state() private siteDraft?: EditableConfig;
@@ -696,7 +767,7 @@ export class IntelligentLoadControllerPanel extends LitElement {
       this.viewState = dashboard.loads.length === 0 ? "empty" : "ready";
       this.hasLoaded = true;
       void this.ensureUpdateSubscription(entryId);
-      if (this.workspaceView !== "dashboard") {
+      if (this.workspaceView !== "overview" && this.workspaceView !== "loads") {
         void this.ensureWorkspaceData(this.workspaceView);
       }
     } catch (error) {
@@ -728,6 +799,7 @@ export class IntelligentLoadControllerPanel extends LitElement {
     return html`
       <header class="page-header">
         <div>
+          <p class="product-title">${translate(this.hass, "app.title")}</p>
           <h1>${this.pageTitle()}</h1>
           <p class="secondary">${this.dashboard?.site.name ?? translate(this.hass, "app.title")}</p>
         </div>
@@ -764,27 +836,29 @@ export class IntelligentLoadControllerPanel extends LitElement {
   private renderWorkspace(dashboard: DashboardData) {
     return html`
       <nav class="workspace-nav" aria-label=${translate(this.hass, "nav.label")}>
-        ${this.renderNavigationButton("dashboard", "nav.dashboard")}
-        ${this.renderNavigationButton("plan", "nav.plan")}
-        ${this.renderNavigationButton("history", "nav.history")}
-        ${this.renderNavigationButton("configure", "nav.configure")}
+        ${PRIMARY_NAV.map((view) => this.renderNavigationButton(view))}
       </nav>
       ${this.renderActionStatus()}
       ${this.sectionLoading === this.workspaceView ? this.renderSectionLoading() : nothing}
-      ${this.workspaceView === "dashboard"
-        ? this.renderDashboard(dashboard)
+      ${this.workspaceView === "overview"
+        ? this.renderOverview(dashboard)
+        : this.workspaceView === "loads"
+          ? this.renderLoads(dashboard)
         : this.workspaceView === "plan"
           ? this.renderPlan()
-          : this.workspaceView === "history"
-            ? this.renderHistory()
-            : this.workspaceView === "configure"
-              ? this.renderConfiguration()
-              : this.renderLoadControls(dashboard)}
+          : this.workspaceView === "site"
+            ? this.renderSite(dashboard)
+            : this.workspaceView === "settings"
+              ? this.renderSettings()
+              : this.workspaceView === "history"
+                ? this.renderHistory()
+                : this.renderLoadDetail(dashboard)}
       ${this.renderDeleteConfirmation()}
     `;
   }
 
-  private renderNavigationButton(view: Exclude<WorkspaceView, "load">, label: Parameters<typeof translate>[1]) {
+  private renderNavigationButton(view: Exclude<WorkspaceView, "history" | "load">) {
+    const label = `nav.${view}` as Parameters<typeof translate>[1];
     return html`
       <button
         class="nav-button"
@@ -908,9 +982,55 @@ export class IntelligentLoadControllerPanel extends LitElement {
     `;
   }
 
-  private renderDashboard(dashboard: DashboardData) {
+  private renderOverview(dashboard: DashboardData) {
+    const runningLoads = dashboard.loads.filter((load) => this.isRunningLoad(load));
+    const nextLoads = dashboard.loads.filter((load) => load.next_action).slice(0, 4);
+    const warningLoads = dashboard.loads.filter(
+      (load) => load.fault || load.target_status === "at_risk" || load.target_status === "impossible",
+    );
     return html`
       ${this.renderMetrics(dashboard.site)}
+      ${this.renderOverviewWarnings(dashboard, warningLoads)}
+      <section aria-labelledby="now-running-title">
+        <div class="section-header">
+          <div>
+            <h2 id="now-running-title">${translate(this.hass, "overview.nowRunning")}</h2>
+            <p class="secondary">${translate(this.hass, "overview.nowRunningHint")}</p>
+          </div>
+          <span class="secondary">${runningLoads.length}</span>
+        </div>
+        ${runningLoads.length === 0
+          ? this.renderEmptyCard("overview.noRunning", "overview.noRunningHint")
+          : html`<div class="load-grid">${runningLoads.map((load) => this.renderLoadCard(load))}</div>`}
+      </section>
+      <section class="panel-card" aria-labelledby="next-actions-title">
+        <div class="section-header">
+          <div>
+            <h2 id="next-actions-title">${translate(this.hass, "overview.nextActions")}</h2>
+            <p class="secondary">${translate(this.hass, "overview.nextActionsHint")}</p>
+          </div>
+          <button class="text-button" type="button" @click=${() => void this.selectWorkspaceView("plan")}>
+            ${translate(this.hass, "nav.plan")}
+          </button>
+        </div>
+        ${nextLoads.length === 0
+          ? html`<p class="secondary">${translate(this.hass, "overview.noNextActions")}</p>`
+          : html`
+              <div class="compact-list">
+                ${nextLoads.map(
+                  (load) => html`
+                    <button class="list-row" type="button" @click=${() => void this.openLoad(load.load_id)}>
+                      <span>
+                        <strong>${load.name}</strong>
+                        <span class="secondary">${load.next_action}</span>
+                      </span>
+                      <span class="state-pill">${localizeControllerState(this.hass, load.controller_state)}</span>
+                    </button>
+                  `,
+                )}
+              </div>
+            `}
+      </section>
       <section class="panel-card" aria-labelledby="snapshot-title">
         <div class="section-header">
           <div>
@@ -920,10 +1040,69 @@ export class IntelligentLoadControllerPanel extends LitElement {
         </div>
         ${this.renderSnapshotChart(dashboard.site)}
       </section>
+      <section class="panel-card" aria-labelledby="overview-links-title">
+        <div class="section-header">
+          <div>
+            <h2 id="overview-links-title">${translate(this.hass, "overview.pageLinks")}</h2>
+            <p class="secondary">${translate(this.hass, "overview.pageLinksHint")}</p>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="secondary-button" type="button" @click=${() => void this.selectWorkspaceView("loads")}>
+            ${translate(this.hass, "nav.loads")}
+          </button>
+          <button class="secondary-button" type="button" @click=${() => void this.selectWorkspaceView("plan")}>
+            ${translate(this.hass, "nav.plan")}
+          </button>
+          <button class="secondary-button" type="button" @click=${() => void this.selectWorkspaceView("site")}>
+            ${translate(this.hass, "nav.site")}
+          </button>
+          <button class="secondary-button" type="button" @click=${() => void this.selectWorkspaceView("settings")}>
+            ${translate(this.hass, "nav.settings")}
+          </button>
+        </div>
+      </section>
+      <p class="updated" aria-live="polite">
+        ${translate(this.hass, "status.updated", {
+          time: formatDateTime(this.hass, dashboard.site.updated_at),
+        })}
+      </p>
+    `;
+  }
+
+  private renderOverviewWarnings(dashboard: DashboardData, warningLoads: readonly LoadSummary[]) {
+    const siteWarning = dashboard.site.health === "warning" || dashboard.site.health === "error";
+    if (!siteWarning && warningLoads.length === 0) {
+      return nothing;
+    }
+    return html`
+      <section class="status-banner" data-state=${siteWarning ? "error" : "warning"} aria-live="polite">
+        <div>
+          <h2>${translate(this.hass, "overview.warnings")}</h2>
+          <p class="secondary">
+            ${siteWarning
+              ? translate(this.hass, "overview.siteWarning")
+              : translate(this.hass, "overview.loadWarning")}
+          </p>
+        </div>
+        <button class="secondary-button" type="button" @click=${() => void this.selectWorkspaceView("site")}>
+          ${translate(this.hass, "nav.site")}
+        </button>
+      </section>
+    `;
+  }
+
+  private renderLoads(dashboard: DashboardData) {
+    return html`
       <section aria-labelledby="loads-title">
         <div class="section-header">
-          <h2 id="loads-title">${translate(this.hass, "load.list")}</h2>
-          <span class="secondary">${dashboard.loads.length}</span>
+          <div>
+            <h2 id="loads-title">${translate(this.hass, "load.list")}</h2>
+            <p class="secondary">${translate(this.hass, "load.listHint")}</p>
+          </div>
+          <button class="secondary-button" type="button" @click=${() => void this.addLoadFromLoads()}>
+            ${translate(this.hass, "load.add")}
+          </button>
         </div>
         ${dashboard.loads.length === 0
           ? this.renderEmpty()
@@ -1116,7 +1295,14 @@ export class IntelligentLoadControllerPanel extends LitElement {
                   ${formatDateTime(this.hass, plan.next_action ?? undefined)}
                 </p>
                 ${plan.warnings?.length
-                  ? html`<p class="secondary">${plan.warnings.join(", ")}</p>`
+                  ? html`
+                      <section class="status-banner" data-state="warning" aria-live="polite">
+                        <div>
+                          <h3>${translate(this.hass, "overview.warnings")}</h3>
+                          <p class="secondary">${plan.warnings.join(", ")}</p>
+                        </div>
+                      </section>
+                    `
                   : nothing}
               </div>
               ${this.renderPlanIntervals(intervals)} ${this.renderPlanProposals(plan)}
@@ -1146,6 +1332,24 @@ export class IntelligentLoadControllerPanel extends LitElement {
       return html`<p class="secondary">${translate(this.hass, "plan.noIntervals")}</p>`;
     }
     return html`
+      <div class="interval-list" aria-label=${translate(this.hass, "plan.intervalCards")}>
+        ${intervals.map(
+          (interval) => html`
+            <article class="interval-card">
+              <div class="section-header">
+                <h3>${this.planLoadName(interval.load_id)}</h3>
+                <span class="state-pill">${this.formatWatts(interval.power_w)}</span>
+              </div>
+              <p class="secondary">
+                ${formatDateTime(this.hass, interval.start_at)} - ${formatDateTime(this.hass, interval.end_at)}
+              </p>
+              <p>
+                ${interval.reason_code ? localizeReasonCode(this.hass, interval.reason_code) : "—"}
+              </p>
+            </article>
+          `,
+        )}
+      </div>
       <div class="table-wrap">
         <table aria-label=${translate(this.hass, "plan.intervals")}>
           <thead>
@@ -1161,7 +1365,7 @@ export class IntelligentLoadControllerPanel extends LitElement {
             ${intervals.map(
               (interval) => html`
                 <tr>
-                  <td>${interval.load_id ?? "—"}</td>
+                  <td>${this.planLoadName(interval.load_id)}</td>
                   <td>${formatDateTime(this.hass, interval.start_at)}</td>
                   <td>${formatDateTime(this.hass, interval.end_at)}</td>
                   <td>${this.formatWatts(interval.power_w)}</td>
@@ -1309,6 +1513,78 @@ export class IntelligentLoadControllerPanel extends LitElement {
           </tbody>
         </table>
       </div>
+    `;
+  }
+
+  private renderSite(dashboard: DashboardData) {
+    const site = dashboard.site;
+    const configuration = this.configuration?.site;
+    return html`
+      <section class="panel-card" aria-labelledby="site-page-title">
+        <div class="section-header">
+          <div>
+            <h2 id="site-page-title">${translate(this.hass, "site.pageTitle")}</h2>
+            <p class="secondary">${translate(this.hass, "site.pageHint")}</p>
+          </div>
+          <span class="state-pill">${this.localizeHealth(site.health)}</span>
+        </div>
+        <dl class="load-meta">
+          ${this.renderLoadMetric(translate(this.hass, "site.name"), site.name)}
+          ${this.renderLoadMetric(
+            translate(this.hass, "load.state"),
+            localizeControllerState(this.hass, site.controller_state),
+          )}
+          ${this.renderLoadMetric(translate(this.hass, "site.controlled"), formatMeasurement(this.hass, site.controlled_power))}
+          ${this.renderLoadMetric(translate(this.hass, "site.updatedAt"), formatDateTime(this.hass, site.updated_at))}
+        </dl>
+      </section>
+      ${this.renderMetrics(site)}
+      <section class="panel-card" aria-labelledby="site-constraints-title">
+        <div class="section-header">
+          <div>
+            <h2 id="site-constraints-title">${translate(this.hass, "site.constraints")}</h2>
+            <p class="secondary">${translate(this.hass, "site.constraintsHint")}</p>
+          </div>
+          <button class="text-button" type="button" @click=${() => void this.selectWorkspaceView("settings")}>
+            ${translate(this.hass, "nav.settings")}
+          </button>
+        </div>
+        ${configuration
+          ? html`
+              <dl class="load-meta">
+                ${this.renderLoadMetric(translate(this.hass, "site.signConvention"), displayJsonValue(configuration["grid_sign_convention"]))}
+                ${this.renderLoadMetric(translate(this.hass, "site.hardImportLimit"), this.formatConfigWatts(configuration["hard_import_limit_w"]))}
+                ${this.renderLoadMetric(translate(this.hass, "site.softImportLimit"), this.formatConfigWatts(configuration["soft_import_limit_w"]))}
+                ${this.renderLoadMetric(translate(this.hass, "site.maxControlledPower"), this.formatConfigWatts(configuration["max_controlled_power_w"]))}
+              </dl>
+            `
+          : html`<p class="secondary">${translate(this.hass, "status.noData")}</p>`}
+      </section>
+      <section class="panel-card" aria-labelledby="site-history-title">
+        <div class="section-header">
+          <div>
+            <h2 id="site-history-title">${translate(this.hass, "history.title")}</h2>
+            <p class="secondary">${translate(this.hass, "history.siteHint")}</p>
+          </div>
+          <button class="secondary-button" type="button" @click=${() => void this.selectWorkspaceView("history")}>
+            ${translate(this.hass, "history.open")}
+          </button>
+        </div>
+      </section>
+    `;
+  }
+
+  private renderSettings() {
+    return html`
+      <section class="panel-card" aria-labelledby="settings-title">
+        <div class="section-header">
+          <div>
+            <h2 id="settings-title">${translate(this.hass, "settings.title")}</h2>
+            <p class="secondary">${translate(this.hass, "settings.hint")}</p>
+          </div>
+        </div>
+      </section>
+      ${this.renderConfiguration()}
     `;
   }
 
@@ -1529,6 +1805,38 @@ export class IntelligentLoadControllerPanel extends LitElement {
     `;
   }
 
+  private renderLoadPlanSummary(load: LoadSummary) {
+    return html`
+      <dl class="load-meta">
+        ${this.renderLoadMetric(
+          translate(this.hass, "load.nextAction"),
+          load.next_action ?? translate(this.hass, "value.unavailable"),
+        )}
+        ${this.renderLoadMetric(
+          translate(this.hass, "load.deadline"),
+          formatDateTime(this.hass, load.deadline),
+        )}
+        ${this.renderLoadMetric(
+          translate(this.hass, "load.optimisation"),
+          load.optimisation_mode ?? translate(this.hass, "value.unavailable"),
+        )}
+        ${this.renderLoadMetric(
+          translate(this.hass, "load.targetStatus"),
+          load.target_status ?? translate(this.hass, "value.unavailable"),
+        )}
+      </dl>
+    `;
+  }
+
+  private renderEmptyCard(titleKey: Parameters<typeof translate>[1], hintKey: Parameters<typeof translate>[1]) {
+    return html`
+      <section class="panel-card empty-state" aria-live="polite">
+        <h2>${translate(this.hass, titleKey)}</h2>
+        <p class="secondary">${translate(this.hass, hintKey)}</p>
+      </section>
+    `;
+  }
+
   private renderTextField(
     name: string,
     label: string,
@@ -1632,15 +1940,15 @@ export class IntelligentLoadControllerPanel extends LitElement {
     `;
   }
 
-  private renderLoadControls(dashboard: DashboardData) {
+  private renderLoadDetail(dashboard: DashboardData) {
     const load = dashboard.loads.find((candidate) => candidate.load_id === this.selectedLoadId);
     if (!load) {
       return html`
         <section class="panel-card empty-state" aria-live="polite">
           <h2>${translate(this.hass, "load.details")}</h2>
-          <p class="secondary">${translate(this.hass, "value.unavailable")}</p>
-          <button class="secondary-button" type="button" @click=${() => void this.selectWorkspaceView("dashboard")}>
-            ${translate(this.hass, "nav.dashboard")}
+          <p class="secondary">${translate(this.hass, "load.notFoundHint")}</p>
+          <button class="secondary-button" type="button" @click=${() => void this.selectWorkspaceView("loads")}>
+            ${translate(this.hass, "load.backToLoads")}
           </button>
         </section>
       `;
@@ -1650,13 +1958,58 @@ export class IntelligentLoadControllerPanel extends LitElement {
         <div class="section-header">
           <div>
             <h2 id="load-controls-title">${load.name}</h2>
-            <p class="secondary">${translate(this.hass, "load.details")}</p>
+            <p class="secondary">${this.displayLoadType(load.load_type)}</p>
           </div>
-          <button class="text-button" type="button" @click=${() => void this.selectWorkspaceView("dashboard")}>
-            ${translate(this.hass, "nav.dashboard")}
+          <button class="text-button" type="button" @click=${() => void this.selectWorkspaceView("loads")}>
+            ${translate(this.hass, "load.backToLoads")}
           </button>
         </div>
+        <div class="chip-row" aria-label=${translate(this.hass, "load.status")}>
+          <span class="state-pill">${localizeControllerState(this.hass, load.controller_state)}</span>
+          <span class="state-pill">
+            ${load.automatic_control ? translate(this.hass, "value.enabled") : translate(this.hass, "value.disabled")}
+          </span>
+          ${load.manual_override ? html`<span class="state-pill">${load.manual_override}</span>` : nothing}
+          ${load.fault ? html`<span class="state-pill fault">${translate(this.hass, "load.fault")}</span>` : nothing}
+        </div>
+      </section>
+      <section class="panel-card" aria-labelledby="load-status-title">
+        <div class="section-header">
+          <div>
+            <h2 id="load-status-title">${translate(this.hass, "load.status")}</h2>
+            <p class="secondary">${translate(this.hass, "load.statusHint")}</p>
+          </div>
+        </div>
         <p class="reason">${localizeReasonCode(this.hass, load.reason_code)}</p>
+        <dl class="load-meta">
+          ${this.renderLoadMetric(translate(this.hass, "load.power"), formatMeasurement(this.hass, load.current_power))}
+          ${this.renderLoadMetric(translate(this.hass, "load.progress"), this.formatProgress(load.progress))}
+          ${this.renderLoadMetric(translate(this.hass, "load.deadline"), formatDateTime(this.hass, load.deadline))}
+          ${this.renderLoadMetric(
+            translate(this.hass, "load.nextAction"),
+            load.next_action ?? translate(this.hass, "value.unavailable"),
+          )}
+        </dl>
+      </section>
+      <section class="panel-card" aria-labelledby="load-planning-title">
+        <div class="section-header">
+          <div>
+            <h2 id="load-planning-title">${translate(this.hass, "load.planning")}</h2>
+            <p class="secondary">${translate(this.hass, "load.planningHint")}</p>
+          </div>
+          <button class="secondary-button" type="button" @click=${() => void this.selectWorkspaceView("plan")}>
+            ${translate(this.hass, "nav.plan")}
+          </button>
+        </div>
+        ${this.renderLoadPlanSummary(load)}
+      </section>
+      <section class="panel-card" aria-labelledby="load-controls-actions-title">
+        <div class="section-header">
+          <div>
+            <h2 id="load-controls-actions-title">${translate(this.hass, "load.controls")}</h2>
+            <p class="secondary">${translate(this.hass, "load.controlsHint")}</p>
+          </div>
+        </div>
         <label class="form-field">
           <span>${translate(this.hass, "load.duration")}</span>
           <input
@@ -1692,6 +2045,17 @@ export class IntelligentLoadControllerPanel extends LitElement {
           </button>
           <button class="danger-button" type="button" @click=${() => void this.clearLoadOverride(load.load_id)}>
             ${translate(this.hass, "load.clearOverride")}
+          </button>
+        </div>
+      </section>
+      <section class="panel-card" aria-labelledby="load-configuration-summary-title">
+        <div class="section-header">
+          <div>
+            <h2 id="load-configuration-summary-title">${translate(this.hass, "load.configurationSummary")}</h2>
+            <p class="secondary">${translate(this.hass, "load.configurationSummaryHint")}</p>
+          </div>
+          <button class="text-button" type="button" @click=${() => void this.editConfiguredLoad(load.load_id)}>
+            ${translate(this.hass, "load.edit")}
           </button>
         </div>
         ${this.loadDetail
@@ -1741,6 +2105,45 @@ export class IntelligentLoadControllerPanel extends LitElement {
     return html`<div><dt>${label}</dt><dd>${value}</dd></div>`;
   }
 
+  private async addLoadFromLoads(): Promise<void> {
+    await this.selectWorkspaceView("settings");
+    this.startAddingLoad();
+  }
+
+  private isRunningLoad(load: LoadSummary): boolean {
+    return (
+      load.current_power?.value !== undefined && load.current_power.value > 0
+    ) || [
+      "scheduled_run",
+      "free_period_run",
+      "solar_run",
+      "low_cost_run",
+      "deadline_catchup",
+      "variable_power_run",
+      "minimum_on_hold",
+      "manual_on",
+    ].includes(load.controller_state);
+  }
+
+  private displayLoadType(loadType: string): string {
+    return loadType
+      .replaceAll("_", " ")
+      .replace(/\b\w/gu, (character) => character.toLocaleUpperCase(this.locale));
+  }
+
+  private formatConfigWatts(value: JsonValue | undefined): string {
+    return typeof value === "number" && Number.isFinite(value)
+      ? this.formatWatts(value)
+      : displayJsonValue(value);
+  }
+
+  private planLoadName(loadId: string | undefined): string {
+    if (!loadId) {
+      return "—";
+    }
+    return this.dashboard?.loads.find((load) => load.load_id === loadId)?.name ?? loadId;
+  }
+
   private async selectWorkspaceView(view: WorkspaceView): Promise<void> {
     this.workspaceView = view;
     this.actionMessage = undefined;
@@ -1752,7 +2155,7 @@ export class IntelligentLoadControllerPanel extends LitElement {
   private async ensureWorkspaceData(view: WorkspaceView, force = false): Promise<void> {
     const entryId = this.selectedEntryId;
     const hass = this.hass;
-    if (!entryId || !hass || view === "dashboard") {
+    if (!entryId || !hass || view === "overview" || view === "loads") {
       return;
     }
     if (!force && this.hasWorkspaceData(view)) {
@@ -1765,7 +2168,7 @@ export class IntelligentLoadControllerPanel extends LitElement {
     this.sectionLoading = view;
     try {
       const api = new LoadControlApi(hass);
-      if (view === "configure") {
+      if (view === "settings" || view === "site") {
         const configuration = await api.getConfiguration(entryId);
         this.configuration = configuration;
         this.siteDraft = editableCopy(configuration.site);
@@ -1801,9 +2204,11 @@ export class IntelligentLoadControllerPanel extends LitElement {
 
   private hasWorkspaceData(view: WorkspaceView): boolean {
     switch (view) {
-      case "dashboard":
+      case "overview":
+      case "loads":
         return true;
-      case "configure":
+      case "settings":
+      case "site":
         return this.configuration !== undefined;
       case "plan":
         return this.currentPlan !== undefined || this.dailyTimeline !== undefined;
@@ -1822,7 +2227,7 @@ export class IntelligentLoadControllerPanel extends LitElement {
     this.editingLoadId = undefined;
     this.configurationIssues = [];
     this.configurationPreview = undefined;
-    await this.ensureWorkspaceData("configure", true);
+    await this.ensureWorkspaceData("settings", true);
     if (clearConflict && this.configuration) {
       this.actionError = undefined;
       this.actionErrorCode = undefined;
@@ -2073,7 +2478,7 @@ export class IntelligentLoadControllerPanel extends LitElement {
   }
 
   private async editConfiguredLoad(loadId: string): Promise<void> {
-    await this.selectWorkspaceView("configure");
+    await this.selectWorkspaceView("settings");
     const config = this.configuration?.loads.find((load) => stringFrom(load["load_id"]) === loadId);
     if (config) {
       this.startEditingLoad(config);
@@ -2193,7 +2598,7 @@ export class IntelligentLoadControllerPanel extends LitElement {
   }
 
   private resetWorkspaceData(): void {
-    this.workspaceView = "dashboard";
+    this.workspaceView = "overview";
     this.selectedLoadId = undefined;
     this.configuration = undefined;
     this.siteDraft = undefined;
@@ -2328,16 +2733,20 @@ export class IntelligentLoadControllerPanel extends LitElement {
       } catch {
         this.selectedLoadId = loadMatch[1];
       }
-    } else if (path.includes("/configure")) {
-      this.workspaceView = "configure";
+    } else if (path.includes(`/${ROUTES.settings}`) || path.includes("/configure")) {
+      this.workspaceView = "settings";
+    } else if (path.includes(`/${ROUTES.site}`)) {
+      this.workspaceView = "site";
     } else if (path.includes("/history")) {
       this.workspaceView = "history";
-    } else if (path.includes("/plan")) {
+    } else if (path.includes(`/${ROUTES.plan}`)) {
       this.workspaceView = "plan";
-    } else if (path.includes("/dashboard")) {
-      this.workspaceView = "dashboard";
+    } else if (path.includes(`/${ROUTES.loads}`)) {
+      this.workspaceView = "loads";
+    } else if (path.includes("/dashboard") || path.includes(`/${ROUTES.overview}`)) {
+      this.workspaceView = "overview";
     }
-    if (this.hasLoaded && this.workspaceView !== "dashboard") {
+    if (this.hasLoaded && this.workspaceView !== "overview" && this.workspaceView !== "loads") {
       queueMicrotask(() => void this.ensureWorkspaceData(this.workspaceView));
     }
   }
@@ -2430,10 +2839,14 @@ export class IntelligentLoadControllerPanel extends LitElement {
         return translate(this.hass, "app.plan");
       case "history":
         return translate(this.hass, "app.history");
-      case "configure":
-        return translate(this.hass, "app.configure");
-      case "dashboard":
-        return translate(this.hass, "app.siteDashboard");
+      case "site":
+        return translate(this.hass, "app.site");
+      case "settings":
+        return translate(this.hass, "app.settings");
+      case "loads":
+        return translate(this.hass, "app.loads");
+      case "overview":
+        return translate(this.hass, "app.overview");
     }
   }
 
@@ -2481,6 +2894,19 @@ function objectFrom(value: JsonValue | undefined): JsonObject | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as JsonObject)
     : undefined;
+}
+
+function displayJsonValue(value: JsonValue | undefined): string {
+  if (value === undefined || value === null || value === "") {
+    return "—";
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return JSON.stringify(value);
 }
 
 declare global {

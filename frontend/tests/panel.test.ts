@@ -24,6 +24,12 @@ async function waitForRender(): Promise<void> {
   });
 }
 
+function navButton(panel: IntelligentLoadControllerPanel, text: string): HTMLButtonElement {
+  return Array.from(panel.shadowRoot?.querySelectorAll(".nav-button") ?? []).find(
+    (button) => button.textContent?.trim() === text,
+  ) as HTMLButtonElement;
+}
+
 afterEach(() => {
   document.body.replaceChildren();
 });
@@ -64,7 +70,11 @@ describe("intelligent-load-controller-panel", () => {
 
     await waitForRender();
 
-    expect(panel.shadowRoot?.textContent).toContain("No controlled loads have been configured yet.");
+    expect(panel.shadowRoot?.textContent).toContain("No loads are running right now.");
+    navButton(panel, "Loads").click();
+    await vi.waitFor(() => {
+      expect(panel.shadowRoot?.textContent).toContain("No controlled loads have been configured yet.");
+    });
     expect(panel.shadowRoot?.querySelector("main")?.getAttribute("aria-busy")).toBe("false");
   });
 
@@ -101,7 +111,7 @@ describe("intelligent-load-controller-panel", () => {
       expect(panel.shadowRoot?.querySelector("[data-state='error']")).not.toBeNull();
     });
 
-    expect(panel.shadowRoot?.textContent).toContain("Unable to load Load Control");
+    expect(panel.shadowRoot?.textContent).toContain("Unable to load Intelligent Load Controller");
     expect(panel.shadowRoot?.textContent).toContain("Service unavailable");
     expect(panel.shadowRoot?.querySelector(".retry-button")).not.toBeNull();
   });
@@ -118,7 +128,7 @@ describe("intelligent-load-controller-panel", () => {
     document.body.append(panel);
 
     await vi.waitFor(() => {
-      expect(panel.shadowRoot?.textContent).toContain("No Load Control sites have been configured yet.");
+      expect(panel.shadowRoot?.textContent).toContain("No Intelligent Load Controller sites have been configured yet.");
     });
 
     expect(calls).toEqual([{ type: "intelligent_load_controller/v1/site_list" }]);
@@ -169,6 +179,243 @@ describe("intelligent-load-controller-panel", () => {
     });
   });
 
+  it("opens the Overview route by default and marks primary navigation state", async () => {
+    const panel = document.createElement(
+      "intelligent-load-controller-panel",
+    ) as IntelligentLoadControllerPanel;
+    panel.hass = createHass((message) => {
+      switch (message["type"]) {
+        case "intelligent_load_controller/v1/site_list":
+          return { sites: [{ entry_id: "entry-home", site_id: "home", name: "Home" }] };
+        case "intelligent_load_controller/v1/site_summary":
+          return {
+            entry_id: "entry-home",
+            site_id: "home",
+            name: "Home",
+            state: "idle",
+            active_loads: 1,
+            waiting_loads: 0,
+          };
+        case "intelligent_load_controller/v1/load_list":
+          return {
+            loads: [
+              {
+                load_id: "hot-water",
+                name: "Hot water",
+                type: "hot_water",
+                state: "scheduled_run",
+                reason_code: "lowest_cost_window",
+                automatic_control: true,
+                config_revision: 9,
+                current_power_w: 1200,
+                next_action: "Run at 13:00",
+              },
+            ],
+          };
+        default:
+          return {};
+      }
+    });
+    document.body.append(panel);
+
+    await vi.waitFor(() => {
+      expect(panel.shadowRoot?.textContent).toContain("Now running");
+    });
+
+    expect(panel.shadowRoot?.querySelector("h1")?.textContent).toContain("Overview");
+    expect(navButton(panel, "Overview").getAttribute("aria-current")).toBe("page");
+    expect(panel.shadowRoot?.textContent).toContain("Intelligent Load Controller");
+  });
+
+  it("uses primary navigation to open Loads, Plan, Site, and Settings pages", async () => {
+    const calls: Record<string, unknown>[] = [];
+    const panel = document.createElement(
+      "intelligent-load-controller-panel",
+    ) as IntelligentLoadControllerPanel;
+    panel.hass = createHass((message) => {
+      calls.push(message);
+      switch (message["type"]) {
+        case "intelligent_load_controller/v1/site_list":
+          return { sites: [{ entry_id: "entry-home", site_id: "home", name: "Home" }] };
+        case "intelligent_load_controller/v1/site_summary":
+          return {
+            entry_id: "entry-home",
+            site_id: "home",
+            name: "Home",
+            state: "idle",
+            active_loads: 0,
+            waiting_loads: 1,
+          };
+        case "intelligent_load_controller/v1/load_list":
+          return {
+            loads: [
+              {
+                load_id: "pool",
+                name: "Pool pump",
+                type: "generic_binary",
+                state: "waiting_for_window",
+                reason_code: "fixed_schedule",
+                automatic_control: false,
+                config_revision: 2,
+              },
+            ],
+          };
+        case "intelligent_load_controller/v1/current_plan":
+          return null;
+        case "intelligent_load_controller/v1/daily_timeline":
+          return { intervals: [], generated_at: null };
+        case "intelligent_load_controller/v1/configuration_read":
+          return {
+            site: {
+              site_name: "Home",
+              grid_sign_convention: "import_positive",
+              hard_import_limit_w: 5000,
+              config_revision: 4,
+            },
+            loads: [],
+            schema: {},
+          };
+        default:
+          return {};
+      }
+    });
+    document.body.append(panel);
+
+    await vi.waitFor(() => {
+      expect(panel.shadowRoot?.textContent).toContain("Now running");
+    });
+
+    navButton(panel, "Loads").click();
+    await vi.waitFor(() => {
+      expect(navButton(panel, "Loads").getAttribute("aria-current")).toBe("page");
+      expect(panel.shadowRoot?.textContent).toContain("All configured loads");
+      expect(panel.shadowRoot?.textContent).toContain("Pool pump");
+    });
+
+    navButton(panel, "Plan").click();
+    await vi.waitFor(() => {
+      expect(panel.shadowRoot?.textContent).toContain("No current plan is available yet.");
+    });
+
+    navButton(panel, "Site").click();
+    await vi.waitFor(() => {
+      expect(calls).toContainEqual({
+        type: "intelligent_load_controller/v1/configuration_read",
+        entry_id: "entry-home",
+      });
+      expect(panel.shadowRoot?.textContent).toContain("Site constraints");
+    });
+
+    navButton(panel, "Settings").click();
+    await vi.waitFor(() => {
+      expect(panel.shadowRoot?.querySelector("input[name='site_name']")).not.toBeNull();
+    });
+  });
+
+  it("opens load detail routes, restores them after refresh, and handles missing loads", async () => {
+    const calls: Record<string, unknown>[] = [];
+    const panel = document.createElement(
+      "intelligent-load-controller-panel",
+    ) as IntelligentLoadControllerPanel;
+    panel.route = { path: "/load/hot-water" };
+    panel.hass = createHass((message) => {
+      calls.push(message);
+      switch (message["type"]) {
+        case "intelligent_load_controller/v1/site_list":
+          return { sites: [{ entry_id: "entry-home", site_id: "home", name: "Home" }] };
+        case "intelligent_load_controller/v1/site_summary":
+          return {
+            entry_id: "entry-home",
+            site_id: "home",
+            name: "Home",
+            state: "idle",
+            active_loads: 0,
+            waiting_loads: 1,
+          };
+        case "intelligent_load_controller/v1/load_list":
+          return {
+            loads: [
+              {
+                load_id: "hot-water",
+                name: "Hot water",
+                type: "hot_water",
+                state: "idle",
+                reason_code: "lowest_cost_window",
+                automatic_control: true,
+                config_revision: 9,
+              },
+            ],
+          };
+        case "intelligent_load_controller/v1/load_detail":
+          return { load_id: "hot-water", actuator: { switch_entity_id: "switch.hot_water" } };
+        default:
+          return {};
+      }
+    });
+    document.body.append(panel);
+
+    await vi.waitFor(() => {
+      expect(panel.shadowRoot?.textContent).toContain("Controls and overrides");
+    });
+    expect(panel.shadowRoot?.textContent).toContain("Hot water");
+    expect(calls).toContainEqual({
+      type: "intelligent_load_controller/v1/load_detail",
+      entry_id: "entry-home",
+      load_id: "hot-water",
+    });
+
+    panel.route = { path: "/load/missing" };
+    panel.requestUpdate("route");
+    await vi.waitFor(() => {
+      expect(panel.shadowRoot?.textContent).toContain("That load is not available on this site.");
+    });
+    expect(panel.shadowRoot?.textContent).toContain("Back to Loads");
+  });
+
+  it("shows a useful no-load page and keeps the add-load action reachable", async () => {
+    const panel = document.createElement(
+      "intelligent-load-controller-panel",
+    ) as IntelligentLoadControllerPanel;
+    panel.route = { path: "/loads" };
+    panel.hass = createHass((message) => {
+      switch (message["type"]) {
+        case "intelligent_load_controller/v1/site_list":
+          return { sites: [{ entry_id: "entry-home", site_id: "home", name: "Home" }] };
+        case "intelligent_load_controller/v1/site_summary":
+          return {
+            entry_id: "entry-home",
+            site_id: "home",
+            name: "Home",
+            state: "idle",
+            active_loads: 0,
+            waiting_loads: 0,
+          };
+        case "intelligent_load_controller/v1/load_list":
+          return { loads: [] };
+        case "intelligent_load_controller/v1/configuration_read":
+          return {
+            site: { site_name: "Home", config_revision: 1 },
+            loads: [],
+            schema: {},
+          };
+        default:
+          return {};
+      }
+    });
+    document.body.append(panel);
+
+    await vi.waitFor(() => {
+      expect(panel.shadowRoot?.textContent).toContain("No controlled loads have been configured yet.");
+    });
+    const addButton = Array.from(panel.shadowRoot?.querySelectorAll("button") ?? []).find(
+      (button) => button.textContent?.trim() === "Add load",
+    ) as HTMLButtonElement;
+    addButton.click();
+    await vi.waitFor(() => {
+      expect(panel.shadowRoot?.querySelector("input[name='display_name']")).not.toBeNull();
+    });
+  });
+
   it("validates with the current revision and offers to reload after a configuration conflict", async () => {
     const calls: Record<string, unknown>[] = [];
     let configurationReads = 0;
@@ -215,9 +462,7 @@ describe("intelligent-load-controller-panel", () => {
     document.body.append(panel);
 
     await waitForRender();
-    const configureButton = Array.from(panel.shadowRoot?.querySelectorAll(".nav-button") ?? []).find(
-      (button) => button.textContent?.trim() === "Configure",
-    ) as HTMLButtonElement;
+    const configureButton = navButton(panel, "Settings");
     configureButton.click();
 
     await vi.waitFor(() => {
@@ -291,12 +536,7 @@ describe("intelligent-load-controller-panel", () => {
     document.body.append(panel);
 
     await waitForRender();
-    const buttonWithText = (text: string): HTMLButtonElement =>
-      Array.from(panel.shadowRoot?.querySelectorAll(".nav-button") ?? []).find(
-        (button) => button.textContent?.trim() === text,
-      ) as HTMLButtonElement;
-
-    buttonWithText("Plan").click();
+    navButton(panel, "Plan").click();
     await vi.waitFor(() => {
       expect(calls).toEqual(
         expect.arrayContaining([
@@ -305,7 +545,8 @@ describe("intelligent-load-controller-panel", () => {
         ]),
       );
     });
-    buttonWithText("History").click();
+    panel.route = { path: "/history" };
+    panel.requestUpdate("route");
     await vi.waitFor(() => {
       expect(calls).toEqual(
         expect.arrayContaining([
@@ -360,10 +601,14 @@ describe("intelligent-load-controller-panel", () => {
     document.body.append(panel);
 
     await vi.waitFor(() => {
+      expect(panel.shadowRoot?.textContent).toContain("Now running");
+    });
+    navButton(panel, "Loads").click();
+    await vi.waitFor(() => {
       expect(panel.shadowRoot?.querySelector(".load-card")).not.toBeNull();
     });
     const openControls = Array.from(panel.shadowRoot?.querySelectorAll(".secondary-button") ?? []).find(
-      (button) => button.textContent?.trim() === "Open controls",
+      (button) => button.textContent?.trim() === "Open details",
     ) as HTMLButtonElement;
     openControls.click();
     await vi.waitFor(() => {
@@ -500,9 +745,7 @@ describe("intelligent-load-controller-panel", () => {
     document.body.append(panel);
 
     await waitForRender();
-    const configureButton = Array.from(panel.shadowRoot?.querySelectorAll(".nav-button") ?? []).find(
-      (button) => button.textContent?.trim() === "Configure",
-    ) as HTMLButtonElement;
+    const configureButton = navButton(panel, "Settings");
     configureButton.click();
     await vi.waitFor(() => {
       expect(panel.shadowRoot?.querySelector(".danger-button")).not.toBeNull();
