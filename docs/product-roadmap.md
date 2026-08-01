@@ -26,6 +26,7 @@ Do not add validation-harness code to this public repository. Public changes sho
 ## Phase 1: Information Architecture and Navigation
 
 **Complexity:** Medium
+**Implementation status:** Implemented and locally validated on `feat/phase1-information-architecture`; pending live validation harness evidence before merge.
 
 **User problem:** The current panel is usable as an engineering console, but a household user cannot quickly answer "what is happening now?" and an administrator cannot see a clear path from setup to operation.
 
@@ -70,6 +71,19 @@ Do not add validation-harness code to this public repository. Public changes sho
 - No table is the only usable mobile representation for core overview content.
 - Direct load routes recover after refresh/reconnect.
 - Existing backend behavior and live smoke validation remain unchanged.
+
+**Implementation evidence:**
+
+- Primary IA pages: Overview, Loads, Plan, Site, Settings.
+- Secondary compatibility route: History.
+- Overview is the default page and shows existing site metrics, warning state, now-running loads, next actions, snapshot, and links to primary pages.
+- Loads and Load detail are separated; invalid load routes show a safe not-found state.
+- Plan keeps existing plan/timeline/proposal data and adds a card summary before the table view.
+- Site presents existing site state, live inputs, health, and configured constraints without changing configuration semantics.
+- Settings preserves the existing Home Assistant-backed configuration, validation, preview, save, load add/edit/duplicate/delete, automatic control, and override paths.
+- Empty, loading, reconnecting, section-loading, API-error, no-site, no-load, no-plan, and missing-load states are handled in the shell.
+- Frontend tests cover default route, primary nav, selected state, load list/detail, missing load, no-site, no-load, no-plan, API failure, narrow route smoke, action reachability, route restoration, and no blank page regression.
+- Backend planner, arbitrator, actuation, entity contracts, safety behavior, and version remain unchanged.
 
 ## Phase 2: Site Dashboard and Decision Transparency
 

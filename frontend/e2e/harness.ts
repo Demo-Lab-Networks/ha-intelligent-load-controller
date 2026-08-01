@@ -17,6 +17,7 @@ const site = {
   solar_production: { value: 1_800, unit: "W", quality: "measured" },
 };
 const emptyInstallation = new URLSearchParams(window.location.search).has("empty");
+const routePath = new URLSearchParams(window.location.search).get("route") ?? "";
 
 const hass: HomeAssistant = {
   language: "en",
@@ -57,6 +58,9 @@ const hass: HomeAssistant = {
           site: {
             site_name: site.name,
             grid_sign_convention: "import_positive",
+            hard_import_limit_w: 5000,
+            soft_import_limit_w: 4500,
+            max_controlled_power_w: 2400,
             planning_horizon_hours: 24,
             planning_resolution_seconds: 300,
             config_revision: 0,
@@ -64,6 +68,10 @@ const hass: HomeAssistant = {
           loads: [],
           schema: {},
         } as TResponse;
+      case "intelligent_load_controller/v1/current_plan":
+        return null as TResponse;
+      case "intelligent_load_controller/v1/daily_timeline":
+        return { intervals: [], generated_at: null } as TResponse;
       default:
         return {} as TResponse;
     }
@@ -72,4 +80,5 @@ const hass: HomeAssistant = {
 
 const panel = document.createElement("intelligent-load-controller-panel");
 panel.hass = hass;
+panel.route = { path: routePath };
 document.body.append(panel);

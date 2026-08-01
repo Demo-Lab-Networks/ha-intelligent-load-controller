@@ -72,6 +72,77 @@ It supports loading, reconnecting, error, no-site, multi-site, empty, and ready 
 
 The current implementation can reach this incrementally. The first phase should rename/reorganise only the visible structure and leave safety semantics unchanged.
 
+## Phase 1 Implemented IA
+
+Phase 1 implements the public sidebar panel as a Home Assistant-native application shell with these primary pages:
+
+```text
+/intelligent-load-controller
+├── Overview
+├── Loads
+├── Load detail
+├── Plan
+├── Site
+└── Settings
+```
+
+The route vocabulary is centralised in the frontend panel module. Supported route paths are:
+
+| Route | Page | Purpose |
+| --- | --- | --- |
+| `/` | Overview | Default landing page for site status, current running loads, next actions, warnings, live snapshot, and links to the main areas. |
+| `/loads` | Loads | Full configured-load inventory with type, state, automation, power, progress, next action, and add-load access. |
+| `/load/:load_id` | Load detail | Per-load shell with back navigation, status, planning summary, controls/overrides, and configuration summary. |
+| `/plan` | Plan | Existing current plan, daily timeline, warnings, replan action, cards, and table details. |
+| `/site` | Site | Existing site state, live measurements, health, and read-only configured constraints. |
+| `/settings` | Settings | Existing configuration, validate, preview, save, add/edit/duplicate/delete load actions. |
+| `/history` | History | Secondary compatibility route for existing history and event journal data. |
+
+Legacy `/dashboard` and `/configure` route fragments recover to Overview and Settings respectively.
+
+## Shared Frontend Structure
+
+Phase 1 keeps the existing Lit panel and typed WebSocket API gateway, but reorganises rendering into page-level methods:
+
+- `renderOverview`
+- `renderLoads`
+- `renderLoadDetail`
+- `renderPlan`
+- `renderSite`
+- `renderSettings`
+- `renderHistory`
+
+Shared helpers remain inside the panel for cards, metrics, load rows, status banners, plan intervals, configuration feedback, form fields, and dialog focus handling. The `LoadControlApi` remains the only frontend WebSocket gateway, and browser state remains a cache/draft rather than a source of control authority.
+
+## Empty, Loading, and Error Conventions
+
+Phase 1 uses these conventions:
+
+- Initial load shows skeleton cards with `aria-busy`.
+- Home Assistant reconnecting shows an assertive status banner and does not issue WebSocket commands.
+- API failure shows a retryable error state and keeps technical detail in the user-visible message from Home Assistant.
+- No site points to Home Assistant Settings.
+- No loads explains that Settings can add a load.
+- Overview no-running and no-next-action states explain what is absent without treating it as an error.
+- Plan empty states say that no current plan or scheduled intervals are available yet.
+- Missing load routes show a safe not-found state with navigation back to Loads.
+- Section reads use a loading banner instead of replacing the whole shell.
+
+## Responsive Navigation
+
+The primary navigation is a horizontally scrollable HA-style tab row with five primary pages: Overview, Loads, Plan, Site, and Settings. Buttons keep practical touch-target height, headers wrap on narrow screens, action groups wrap, load metadata becomes one column on small viewports, and plan interval cards are shown before wide tables so mobile users are not forced to rely on horizontal scrolling for the core plan summary.
+
+## Phase 1 Boundaries
+
+Phase 1 intentionally does not implement:
+
+- new planning, optimisation, arbitration, actuation, tariff, solar, battery, or safety behaviour;
+- type-aware setup wizards;
+- plain-language decision explanation facts beyond existing reason-code translations;
+- new schedule editors or timeline overlays;
+- new backend configuration semantics;
+- harness-specific URLs, entity IDs, or validation logic.
+
 ## Home Assistant-Native Patterns
 
 Use Home Assistant conventions as the primary reference:

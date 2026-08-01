@@ -57,7 +57,7 @@ test("production bundle registers the panel in Chromium without a fake process g
   await loadProductionBundle(page);
 
   await expect(page.locator("intelligent-load-controller-panel")).toBeVisible();
-  await expect(page.locator("intelligent-load-controller-panel").getByText("No controlled loads")).toBeVisible();
+  await expect(page.locator("intelligent-load-controller-panel").getByText("No loads are running right now.")).toBeVisible();
   await expectNoBrowserBundleErrors(page);
 });
 
@@ -72,7 +72,18 @@ test("production panel remains visible when the optional chart component fails",
     };
   });
 
-  await loadProductionBundle(page, { loads: [{ load_id: "hot-water", name: "Hot water" }] });
+  await loadProductionBundle(page, {
+    loads: [
+      {
+        load_id: "hot-water",
+        name: "Hot water",
+        state: "scheduled_run",
+        reason_code: "lowest_cost_window",
+        automatic_control: true,
+        current_power_w: 1200,
+      },
+    ],
+  });
 
   const panel = page.locator("intelligent-load-controller-panel");
   await expect(panel).toBeVisible();
